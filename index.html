@@ -861,6 +861,43 @@
       font-weight: 650;
     }
 
+    .media-tools {
+      display: grid;
+      gap: 8px;
+    }
+
+    .media-count {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .media-list {
+      display: grid;
+      gap: 6px;
+      margin: 8px 0 0;
+      padding-left: 18px;
+      color: var(--ink);
+      font-size: 12px;
+    }
+
+    .scanner-panel {
+      display: grid;
+      gap: 12px;
+    }
+
+    .scanner-video {
+      width: 100%;
+      max-height: 360px;
+      background: #10282f;
+      object-fit: contain;
+    }
+
+    .report-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
     .signature {
       width: 100%;
       height: 120px;
@@ -1057,6 +1094,7 @@
                   <th>Finalizado em</th>
                   <th>Executor</th>
                   <th>Status</th>
+                  <th>Acoes</th>
                 </tr>
               </thead>
               <tbody id="historyRows"></tbody>
@@ -1189,6 +1227,45 @@
     </div>
   </div>
 
+  <div class="modal-backdrop" id="publishModal" role="dialog" aria-modal="true" aria-labelledby="publishModalTitle">
+    <div class="modal">
+      <div class="panel-header">
+        <h2 id="publishModalTitle">Publicar checklist</h2>
+        <button class="icon-btn" id="closePublishModal" aria-label="Fechar">X</button>
+      </div>
+      <div class="panel-body">
+        <p class="lead">Tem certeza que deseja publicar este checklist? Depois da publicacao, ele ficara disponivel no historico para consulta e extracao em PDF.</p>
+        <div class="top-actions" style="margin-top:18px;">
+          <button class="btn" id="cancelPublish">Cancelar</button>
+          <button class="btn primary" id="confirmPublish">Sim, publicar checklist</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="scannerModal" role="dialog" aria-modal="true" aria-labelledby="scannerModalTitle">
+    <div class="modal">
+      <div class="panel-header">
+        <h2 id="scannerModalTitle">Leitura por camera</h2>
+        <button class="icon-btn" id="closeScannerModal" aria-label="Fechar">X</button>
+      </div>
+      <div class="panel-body scanner-panel">
+        <video class="scanner-video" id="scannerVideo" autoplay muted playsinline></video>
+        <p class="lead" id="scannerStatus">Aponte a camera para o QR Code ou codigo de barras. Leitores RF tambem podem preencher o campo diretamente.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="reportModal" role="dialog" aria-modal="true" aria-labelledby="reportModalTitle">
+    <div class="modal">
+      <div class="panel-header">
+        <h2 id="reportModalTitle">Checklist realizado</h2>
+        <button class="icon-btn" id="closeReportModal" aria-label="Fechar">X</button>
+      </div>
+      <div class="panel-body" id="reportBody"></div>
+    </div>
+  </div>
+
   <script>
     const questionTypes = [
       { id: "positive", label: "Positivo/Negativo", desc: "Resposta de conformidade, sim ou nao." },
@@ -1311,6 +1388,10 @@
     let selectedRouteId = null;
     let mobileStepIndex = 0;
     let mobileAnswers = {};
+    let publishedChecklists = [];
+    let scannerStream = null;
+    let scannerTimer = null;
+    let scannerTargetItemId = null;
 
     const views = document.querySelectorAll(".view");
     const navButtons = document.querySelectorAll(".nav-button");
@@ -1403,15 +1484,16 @@
       if (!summary || !rows) return;
 
       const query = (byId("historySearch")?.value || "").trim().toLowerCase();
-      const filtered = historyItems.filter(item => {
+      const allHistory = [...publishedChecklists, ...historyItems];
+      const filtered = allHistory.filter(item => {
         const text = `${item.id} ${item.division} ${item.branch} ${item.route} ${item.object} ${item.executor}`.toLowerCase();
         return text.includes(query);
       });
-      const branches = [...new Set(historyItems.map(item => item.branch))];
+      const branches = [...new Set(allHistory.map(item => item.branch))];
 
       summary.innerHTML = "";
       branches.forEach(branch => {
-        const branchItems = historyItems.filter(item => item.branch === branch);
+        const branchItems = allHistory.filter(item => item.branch === branch);
         const divisions = [...new Set(branchItems.map(item => item.division))].join(" / ");
         const card = document.createElement("article");
         card.className = "branch-card";
@@ -1432,13 +1514,21 @@
           <td>${item.finished}</td>
           <td>${item.executor}</td>
           <td><span class="status-pill">${item.status}</span></td>
+          <td><div class="report-actions"><button class="btn small" data-view-report="${item.id}">Ver</button><button class="btn small" data-export-report="${item.id}">PDF</button></div></td>
         `;
         rows.append(row);
       });
 
       if (!filtered.length) {
-        rows.innerHTML = `<tr><td colspan="9">Nenhum checklist encontrado para a pesquisa.</td></tr>`;
+        rows.innerHTML = `<tr><td colspan="10">Nenhum checklist encontrado para a pesquisa.</td></tr>`;
       }
+
+      rows.querySelectorAll("[data-view-report]").forEach(button => {
+        button.addEventListener("click", () => openReport(button.dataset.viewReport));
+      });
+      rows.querySelectorAll("[data-export-report]").forEach(button => {
+        button.addEventListener("click", () => exportReportPdf(button.dataset.exportReport));
+      });
     }
 
     function renderRouteSummary() {
@@ -1735,10 +1825,14 @@
         target.innerHTML = `
           <article class="answer-card">
             <h3>Checklist concluido</h3>
-            <p>Todas as perguntas obrigatorias foram preenchidas.</p>
-            <button class="btn primary" data-restart-mobile>Iniciar novamente</button>
+            <p>Todas as perguntas obrigatorias foram preenchidas. Revise as informacoes e publique para enviar ao historico.</p>
+            <button class="btn primary" data-publish-mobile>Publicar Checklist</button>
+            <button class="btn" style="margin-top:8px;" data-restart-mobile>Iniciar novamente</button>
           </article>
         `;
+        target.querySelector("[data-publish-mobile]").addEventListener("click", () => {
+          byId("publishModal").classList.add("open");
+        });
         target.querySelector("[data-restart-mobile]").addEventListener("click", () => {
           mobileStepIndex = 0;
           mobileAnswers = {};
@@ -1777,9 +1871,29 @@
           body.append(label);
         });
       } else if (item.type === "media") {
-        body.innerHTML = `<label class="photo-drop"><input type="file" accept="image/*" capture="environment" multiple style="display:none"> Abrir camera ou galeria</label><small>Minimo ${item.min || 1}, maximo ${item.max || 30} imagens</small>`;
-        body.querySelector("input").addEventListener("change", event => {
-          mobileAnswers[item.id] = { ...mobileAnswers[item.id], value: event.target.files.length };
+        const minPhotos = Number(item.min || 1);
+        const maxPhotos = Number(item.max || 30);
+        const photos = answer.photos || [];
+        body.innerHTML = `
+          <div class="media-tools">
+            <div class="media-count">Fotos registradas: ${photos.length} de ${maxPhotos}. Minimo obrigatorio: ${minPhotos}.</div>
+            <label class="photo-drop"><input data-camera-photo type="file" accept="image/*" capture="environment" style="display:none"> Tirar foto ${Math.min(photos.length + 1, maxPhotos)} de ${maxPhotos}</label>
+            <label class="photo-drop"><input data-gallery-photo type="file" accept="image/*" style="display:none"> Adicionar da galeria</label>
+            <ul class="media-list">${photos.map((photo, photoIndex) => `<li>Foto ${photoIndex + 1}: ${photo.name}</li>`).join("")}</ul>
+          </div>
+        `;
+        body.querySelectorAll("input[type=file]").forEach(fileInput => {
+          fileInput.disabled = photos.length >= maxPhotos;
+          fileInput.addEventListener("change", event => {
+            const file = event.target.files[0];
+            if (!file) return;
+            const current = [...(mobileAnswers[item.id]?.photos || [])];
+            if (current.length < maxPhotos) {
+              current.push({ name: file.name || `Foto ${current.length + 1}`, url: URL.createObjectURL(file) });
+            }
+            mobileAnswers[item.id] = { ...mobileAnswers[item.id], value: current.length, photos: current };
+            renderMobileItems();
+          });
         });
       } else if (item.type === "number") {
         body.innerHTML = `<input type="number" placeholder="Digite o numero da nota fiscal" value="${answer.value || ""}">`;
@@ -1791,8 +1905,9 @@
         body.innerHTML = `<input type="date" value="${answer.value || ""}">`;
         body.querySelector("input").addEventListener("input", event => mobileAnswers[item.id] = { ...mobileAnswers[item.id], value: event.target.value });
       } else if (item.type === "barcode") {
-        body.innerHTML = `<input type="text" placeholder="Bipe ou digite o codigo" value="${answer.value || ""}"><button class="btn small" style="margin-top:8px;">Ler codigo</button><p style="margin-top:8px;">Use leitor fisico, camera do celular ou entrada manual.</p>`;
+        body.innerHTML = `<input type="text" placeholder="Bipe pelo RF ou digite o codigo" value="${answer.value || ""}"><button class="btn small" data-open-scanner style="margin-top:8px;">Abrir camera para QR/codigo de barras</button><p style="margin-top:8px;">Use a camera do celular, leitor RF ou entrada manual.</p>`;
         body.querySelector("input").addEventListener("input", event => mobileAnswers[item.id] = { ...mobileAnswers[item.id], value: event.target.value });
+        body.querySelector("[data-open-scanner]").addEventListener("click", () => openScanner(item.id));
       } else if (item.type === "signature") {
         body.innerHTML = `<canvas class="signature" width="330" height="120" data-signature-id="${item.id}"></canvas><button class="btn small" style="margin-top:8px;" data-clear-signature>Limpar assinatura</button>`;
       }
@@ -1839,6 +1954,7 @@
       if (!item.required) return true;
       const answer = mobileAnswers[item.id];
       if (!answer || answer.value === undefined || answer.value === null) return false;
+      if (item.type === "media") return Number(answer.value || 0) >= Number(item.min || 1);
       if (Array.isArray(answer.value)) return answer.value.length > 0;
       if (typeof answer.value === "number") return answer.value > 0;
       return String(answer.value).trim().length > 0;
@@ -1899,6 +2015,107 @@
       });
     }
 
+    async function openScanner(itemId) {
+      scannerTargetItemId = itemId;
+      byId("scannerModal").classList.add("open");
+      byId("scannerStatus").textContent = "Aponte a camera para o QR Code ou codigo de barras.";
+      try {
+        scannerStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        const video = byId("scannerVideo");
+        video.srcObject = scannerStream;
+        if ("BarcodeDetector" in window) {
+          const detector = new BarcodeDetector({ formats: ["qr_code", "code_128", "ean_13", "ean_8", "code_39", "itf"] });
+          scannerTimer = setInterval(async () => {
+            const codes = await detector.detect(video).catch(() => []);
+            if (codes.length) {
+              mobileAnswers[scannerTargetItemId] = { ...mobileAnswers[scannerTargetItemId], value: codes[0].rawValue };
+              closeScanner();
+              renderMobileItems();
+            }
+          }, 600);
+        } else {
+          byId("scannerStatus").textContent = "Camera aberta. Caso a leitura automatica nao esteja disponivel neste navegador, use o leitor RF ou digite o codigo no campo.";
+        }
+      } catch (error) {
+        byId("scannerStatus").textContent = "Nao foi possivel abrir a camera. Verifique a permissao do navegador ou use o leitor RF.";
+      }
+    }
+
+    function closeScanner() {
+      if (scannerTimer) clearInterval(scannerTimer);
+      scannerTimer = null;
+      if (scannerStream) scannerStream.getTracks().forEach(track => track.stop());
+      scannerStream = null;
+      byId("scannerVideo").srcObject = null;
+      byId("scannerModal").classList.remove("open");
+    }
+
+    function publishChecklist() {
+      const route = routeOptions().find(option => option.id === selectedRouteId) || routeOptions()[0];
+      const now = new Date();
+      const id = String(Date.now()).slice(-10);
+      publishedChecklists.unshift({
+        id,
+        division: "Sul de Minas",
+        branch: "Pouso Alegre",
+        route: route.title,
+        object: "Checklist publicado",
+        created: now.toLocaleDateString("pt-BR") + " - " + now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+        finished: now.toLocaleDateString("pt-BR") + " - " + now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+        executor: "Unico Group",
+        status: "Execucao finalizada",
+        answers: JSON.parse(JSON.stringify(mobileAnswers)),
+        items: JSON.parse(JSON.stringify(items))
+      });
+      byId("publishModal").classList.remove("open");
+      mobileStepIndex = items.length;
+      renderDashboard();
+      byId("mobileItems").innerHTML = `<article class="answer-card"><h3>Checklist publicado</h3><p>Publicacao realizada com sucesso. O registro ja esta disponivel no historico.</p><button class="btn primary" data-go-history>Ver historico</button></article>`;
+      byId("mobileItems").querySelector("[data-go-history]").addEventListener("click", () => setView("dashboard"));
+    }
+
+    function findReport(id) {
+      return [...publishedChecklists, ...historyItems].find(item => item.id === id);
+    }
+
+    function reportHtml(report) {
+      const reportItems = report.items || items;
+      const answers = report.answers || {};
+      const rows = reportItems.map((item, index) => {
+        const answer = answers[item.id] || {};
+        const value = Array.isArray(answer.value) ? answer.value.join(", ") : (answer.value || "Registro demonstrativo");
+        const photos = (answer.photos || []).map(photo => `<img src="${photo.url}" alt="${photo.name}">`).join("");
+        return `<section><h3>${index + 1}. ${item.title}</h3><p><strong>Resposta:</strong> ${value}</p>${answer.observation ? `<p><strong>Observacoes:</strong> ${answer.observation}</p>` : ""}<div class="pdf-photos">${photos}</div></section>`;
+      }).join("");
+      return `<div class="pdf-report"><h1>${report.route}</h1><p><strong>Checklist:</strong> ${report.id}</p><p><strong>Filial:</strong> ${report.branch}</p><p><strong>Executor:</strong> ${report.executor}</p><p><strong>Finalizado em:</strong> ${report.finished}</p>${rows}</div>`;
+    }
+
+    function openReport(id) {
+      const report = findReport(id);
+      if (!report) return;
+      byId("reportBody").innerHTML = reportHtml(report);
+      byId("reportModal").classList.add("open");
+    }
+
+    function exportReportPdf(id) {
+      const report = findReport(id);
+      if (!report) return;
+      const win = window.open("", "_blank");
+      win.document.write(`
+        <!doctype html><html><head><title>Checklist ${report.id}</title>
+        <style>
+          body{font-family:Arial,sans-serif;color:#17323b;margin:28px;}
+          h1{font-size:22px;margin-bottom:8px;} section{page-break-inside:avoid;border-top:1px solid #d8e1e4;padding:14px 0;}
+          h3{font-size:15px;margin-bottom:8px;} p{font-size:12px;color:#26373d;}
+          .pdf-photos{display:grid;gap:10px;grid-template-columns:repeat(2,minmax(0,1fr));}
+          .pdf-photos img{width:100%;height:auto;max-height:520px;object-fit:contain;border:1px solid #d8e1e4;background:#fff;}
+        </style></head><body>${reportHtml(report)}</body></html>
+      `);
+      win.document.close();
+      win.focus();
+      setTimeout(() => win.print(), 500);
+    }
+
     function renderAll() {
       renderLocations();
       renderDashboard();
@@ -1915,6 +2132,11 @@
     modal.addEventListener("click", event => {
       if (event.target === modal) modal.classList.remove("open");
     });
+    byId("closePublishModal").addEventListener("click", () => byId("publishModal").classList.remove("open"));
+    byId("cancelPublish").addEventListener("click", () => byId("publishModal").classList.remove("open"));
+    byId("confirmPublish").addEventListener("click", publishChecklist);
+    byId("closeScannerModal").addEventListener("click", closeScanner);
+    byId("closeReportModal").addEventListener("click", () => byId("reportModal").classList.remove("open"));
     byId("historySearch").addEventListener("input", renderDashboard);
     byId("routeTitle").addEventListener("input", () => {
       renderRouteSummary();
