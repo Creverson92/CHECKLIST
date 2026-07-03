@@ -533,6 +533,11 @@
       background: #fff;
     }
 
+    .check-item.open {
+      border-color: rgba(0, 153, 184, .45);
+      box-shadow: 0 8px 20px rgba(23, 50, 59, .08);
+    }
+
     .check-item-title {
       display: flex;
       align-items: center;
@@ -542,6 +547,32 @@
       border-bottom: 1px solid var(--line);
       color: var(--navy);
       font-weight: 700;
+    }
+
+    .check-item-title.clickable {
+      cursor: pointer;
+    }
+
+    .check-item-heading {
+      min-width: 0;
+    }
+
+    .check-item-heading strong {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .check-item-summary {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 400;
+      margin-top: 4px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .item-type {
@@ -1141,6 +1172,7 @@
     ];
 
     let items = JSON.parse(JSON.stringify(initialItems));
+    let expandedItemId = null;
 
     const views = document.querySelectorAll(".view");
     const navButtons = document.querySelectorAll(".nav-button");
@@ -1296,6 +1328,7 @@
         mediaMode: "Camera",
         options: defaults[type] || []
       });
+      expandedItemId = items[items.length - 1].id;
       renderAll();
     }
 
@@ -1306,6 +1339,7 @@
       copy.id = Date.now();
       copy.title = `${copy.title} - copia`;
       items.splice(items.indexOf(item) + 1, 0, copy);
+      expandedItemId = copy.id;
       renderAll();
     }
 
@@ -1320,29 +1354,52 @@
       }
 
       items.forEach((item, index) => {
+        const isOpen = expandedItemId === item.id;
         const card = document.createElement("article");
-        card.className = "check-item";
+        card.className = `check-item${isOpen ? " open" : ""}`;
         const header = document.createElement("div");
-        header.className = "check-item-title";
-        header.innerHTML = `<div>ITEM ${index + 1} - ${item.title.toUpperCase()} <span class="item-type">(${typeLabel(item.type)})</span></div>`;
+        header.className = `check-item-title${compact ? "" : " clickable"}`;
+        header.innerHTML = `
+          <div class="check-item-heading">
+            <strong>ITEM ${index + 1} - ${item.title.toUpperCase()} <span class="item-type">(${typeLabel(item.type)})</span></strong>
+            <span class="check-item-summary">${item.support || "Sem frase de apoio"}</span>
+          </div>
+        `;
 
         if (!compact) {
+          header.addEventListener("click", () => {
+            expandedItemId = isOpen ? null : item.id;
+            renderAll();
+          });
           const actions = document.createElement("div");
           actions.className = "item-actions";
+          const edit = document.createElement("button");
+          edit.className = "btn small";
+          edit.textContent = isOpen ? "Recolher" : "Editar";
+          edit.addEventListener("click", event => {
+            event.stopPropagation();
+            expandedItemId = isOpen ? null : item.id;
+            renderAll();
+          });
           const clone = document.createElement("button");
           clone.className = "icon-btn";
           clone.title = "Clonar item";
           clone.textContent = "[]";
-          clone.addEventListener("click", () => cloneItem(item.id));
+          clone.addEventListener("click", event => {
+            event.stopPropagation();
+            cloneItem(item.id);
+          });
           const del = document.createElement("button");
           del.className = "icon-btn";
           del.title = "Excluir item";
           del.textContent = "X";
-          del.addEventListener("click", () => {
+          del.addEventListener("click", event => {
+            event.stopPropagation();
             items = items.filter(entry => entry.id !== item.id);
+            if (expandedItemId === item.id) expandedItemId = null;
             renderAll();
           });
-          actions.append(clone, del);
+          actions.append(edit, clone, del);
           header.append(actions);
         }
 
@@ -1351,7 +1408,7 @@
 
         if (compact) {
           body.innerHTML = `<p class="lead">${item.support || "Sem frase de apoio"}</p>`;
-        } else {
+        } else if (isOpen) {
           const titleField = document.createElement("div");
           titleField.className = "field";
           titleField.innerHTML = "<label>Pergunta</label>";
@@ -1413,7 +1470,8 @@
           body.append(footer);
         }
 
-        card.append(header, body);
+        card.append(header);
+        if (compact || isOpen) card.append(body);
         target.append(card);
       });
     }
@@ -1588,6 +1646,7 @@
 
     byId("resetDemo").addEventListener("click", () => {
       items = JSON.parse(JSON.stringify(initialItems));
+      expandedItemId = null;
       renderAll();
     });
 
