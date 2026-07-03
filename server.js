@@ -15,12 +15,14 @@ const users = [
   {
     username: process.env.ADMIN_USER || "Creverson",
     password: process.env.ADMIN_PASSWORD,
+    passwordHash: process.env.ADMIN_PASSWORD_HASH,
     role: "admin",
     name: process.env.ADMIN_NAME || "Creverson"
   },
   {
     username: process.env.APP_USER || "Anderson",
     password: process.env.APP_PASSWORD,
+    passwordHash: process.env.APP_PASSWORD_HASH,
     role: "app",
     name: process.env.APP_NAME || "Anderson"
   }
@@ -65,15 +67,25 @@ function safeUser(user) {
   };
 }
 
+function sha256(value) {
+  return crypto.createHash("sha256").update(String(value)).digest("hex");
+}
+
+function passwordMatches(user, password) {
+  if (user.password) return user.password === password;
+  if (user.passwordHash) return user.passwordHash === sha256(password);
+  return false;
+}
+
 const server = http.createServer(async (request, response) => {
   if (request.method === "POST" && request.url === "/api/login") {
-    if (users.some(user => !user.password)) {
+    if (users.some(user => !user.password && !user.passwordHash)) {
       return sendJson(response, 500, { error: "Credenciais do servidor nao configuradas." });
     }
 
     const payload = JSON.parse(await readBody(request) || "{}");
     const normalized = String(payload.username || "").trim().toLowerCase();
-    const user = users.find(entry => entry.username.toLowerCase() === normalized && entry.password === payload.password);
+    const user = users.find(entry => entry.username.toLowerCase() === normalized && passwordMatches(entry, payload.password));
 
     if (!user) return sendJson(response, 401, { error: "Usuario ou senha invalidos." });
 
