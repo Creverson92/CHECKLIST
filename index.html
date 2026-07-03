@@ -604,6 +604,33 @@
       padding: 16px;
     }
 
+    .route-summary {
+      margin-bottom: 18px;
+    }
+
+    .route-summary-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px 18px;
+      cursor: pointer;
+      border-bottom: 0;
+    }
+
+    .route-summary-header strong {
+      display: block;
+      color: var(--navy);
+      font-size: 17px;
+    }
+
+    .route-summary-header span {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 4px;
+      display: block;
+    }
+
     .check-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0,1fr));
@@ -993,9 +1020,15 @@
             <button class="btn primary" id="openTypeModal">+ Incluir item</button>
           </div>
 
-          <section class="panel" style="margin-bottom: 18px;">
-            <div class="panel-header"><h2>Informacoes iniciais</h2></div>
-            <div class="panel-body">
+          <section class="panel route-summary" id="routeSummaryPanel">
+            <div class="route-summary-header" id="routeSummaryHeader">
+              <div>
+                <strong id="routeSummaryTitle">Recebimento de cargas - UNICO</strong>
+                <span>Clique para expandir as configuracoes do roteiro</span>
+              </div>
+              <button class="btn small" id="toggleRouteSummary" type="button">Expandir</button>
+            </div>
+            <div class="panel-body" id="routeSummaryBody" hidden>
               <div class="field">
                 <label for="routeTitle">Titulo</label>
                 <input id="routeTitle" value="Recebimento de cargas - UNICO">
@@ -1173,6 +1206,7 @@
 
     let items = JSON.parse(JSON.stringify(initialItems));
     let expandedItemId = null;
+    let routeSummaryOpen = false;
 
     const views = document.querySelectorAll(".view");
     const navButtons = document.querySelectorAll(".nav-button");
@@ -1286,6 +1320,14 @@
       if (!filtered.length) {
         rows.innerHTML = `<tr><td colspan="9">Nenhum checklist encontrado para a pesquisa.</td></tr>`;
       }
+    }
+
+    function renderRouteSummary() {
+      const titleInput = byId("routeTitle");
+      const title = titleInput?.value.trim() || "Roteiro sem titulo";
+      byId("routeSummaryTitle").textContent = title;
+      byId("routeSummaryBody").hidden = !routeSummaryOpen;
+      byId("toggleRouteSummary").textContent = routeSummaryOpen ? "Recolher" : "Expandir";
     }
 
     function renderTypeGrid() {
@@ -1616,6 +1658,7 @@
     function renderAll() {
       renderLocations();
       renderDashboard();
+      renderRouteSummary();
       renderTypeGrid();
       renderBuilderItems("builderItems");
       renderMobileItems();
@@ -1629,6 +1672,16 @@
       if (event.target === modal) modal.classList.remove("open");
     });
     byId("historySearch").addEventListener("input", renderDashboard);
+    byId("routeTitle").addEventListener("input", renderRouteSummary);
+    byId("routeSummaryHeader").addEventListener("click", () => {
+      routeSummaryOpen = !routeSummaryOpen;
+      renderRouteSummary();
+    });
+    byId("toggleRouteSummary").addEventListener("click", event => {
+      event.stopPropagation();
+      routeSummaryOpen = !routeSummaryOpen;
+      renderRouteSummary();
+    });
 
     byId("addLocation").addEventListener("click", () => {
       const name = byId("locationName").value.trim();
