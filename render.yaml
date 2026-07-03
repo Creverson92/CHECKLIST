@@ -2,6 +2,7 @@ services:
   - type: web
     name: unico-checklist
     runtime: static
+    buildCommand: echo "Static site ready"
     staticPublishPath: .
     routes:
       - type: rewrite
