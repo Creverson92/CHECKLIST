@@ -120,8 +120,12 @@
       padding: 22px 18px 34px;
     }
 
+    body.role-app .view:not(#mobile) {
+      display: none !important;
+    }
+
     body.role-app #mobile {
-      display: block;
+      display: block !important;
     }
 
     body.role-app .route-picker {
@@ -1637,6 +1641,10 @@
         button.hidden = !isAdmin && target !== "mobile";
       });
       byId("userBadge").textContent = `${currentUser.name} - ${isAdmin ? "Administrador" : "Usuario normal"}`;
+      if (!isAdmin) {
+        views.forEach(view => view.classList.toggle("active", view.id === "mobile"));
+        navButtons.forEach(button => button.classList.toggle("active", button.dataset.view === "mobile"));
+      }
       setView(isAdmin ? "dashboard" : "mobile");
     }
 
