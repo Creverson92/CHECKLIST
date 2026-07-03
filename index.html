@@ -631,6 +631,26 @@
       display: block;
     }
 
+    .embedded-section {
+      border-top: 1px solid var(--line);
+      margin-top: 18px;
+      padding-top: 18px;
+    }
+
+    .embedded-section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .embedded-section-header h2 {
+      margin: 0;
+      color: var(--navy);
+      font-size: 18px;
+    }
+
     .check-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0,1fr));
@@ -1042,16 +1062,14 @@
                 <div id="routeLocations" class="pill-row"></div>
               </div>
               <label class="toggle"><input type="checkbox" id="nonSequential"> Roteiro nao sequencial</label>
-            </div>
-          </section>
 
-          <section class="panel">
-            <div class="panel-header">
-              <h2>Criacao do roteiro</h2>
-              <button class="btn small" id="resetDemo">Restaurar exemplo</button>
-            </div>
-            <div class="panel-body">
-              <div id="builderItems" class="item-list"></div>
+              <div class="embedded-section">
+                <div class="embedded-section-header">
+                  <h2>Criacao do roteiro</h2>
+                  <button class="btn small" id="resetDemo">Restaurar exemplo</button>
+                </div>
+                <div id="builderItems" class="item-list"></div>
+              </div>
             </div>
           </section>
         </section>
