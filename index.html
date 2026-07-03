@@ -1229,16 +1229,16 @@
         </section>
 
         <section class="view" id="mobile">
-          <div class="page-title">
-            <div>
-              <h1>Aplicativo do motorista</h1>
-              <p class="lead">Selecione um roteiro criado para iniciar o preenchimento em campo.</p>
-            </div>
-          </div>
           <section class="panel route-picker" id="routePicker">
             <div class="panel-header"><h2>Escolher roteiro</h2></div>
             <div class="panel-body">
               <div class="route-picker-grid" id="routePickerGrid"></div>
+            </div>
+          </section>
+          <section class="panel route-picker" id="locationPicker" hidden>
+            <div class="panel-header"><h2>Escolher local</h2></div>
+            <div class="panel-body">
+              <div class="route-picker-grid" id="locationPickerGrid"></div>
             </div>
           </section>
           <div class="mobile-preview" id="mobilePreview" hidden>
@@ -1425,6 +1425,7 @@
     let expandedItemId = null;
     let routeSummaryOpen = false;
     let selectedRouteId = null;
+    let selectedLocationId = null;
     let mobileStepIndex = 0;
     let mobileAnswers = {};
     let publishedChecklists = [];
@@ -1447,21 +1448,32 @@
     }
 
     function setView(id) {
-      if (id === "mobile") selectedRouteId = null;
+      if (id === "mobile") {
+        selectedRouteId = null;
+        selectedLocationId = null;
+      }
       views.forEach(view => view.classList.toggle("active", view.id === id));
       navButtons.forEach(button => button.classList.toggle("active", button.dataset.view === id));
       renderRoutePicker();
+      renderLocationPicker();
       renderMobileItems();
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
+    function selectedRouteLocations() {
+      const checked = [...document.querySelectorAll("#routeLocations input:checked")].map(input => Number(input.dataset.locationId));
+      const chosen = locations.filter(location => checked.includes(location.id));
+      return chosen.length ? chosen : locations.slice(0, 1);
+    }
+
     function routeOptions() {
       const title = byId("routeTitle")?.value.trim() || "Recebimento de cargas - UNICO";
+      const routeLocations = selectedRouteLocations();
       return [
         {
           id: "main",
           title,
-          location: "Matriz Pouso Alegre",
+          locations: routeLocations,
           detail: `${items.length} itens cadastrados`
         }
       ];
@@ -1512,7 +1524,12 @@
       locations.forEach((location, index) => {
         const label = document.createElement("label");
         label.className = "pill";
-        label.innerHTML = `<input type="checkbox" ${index < 2 ? "checked" : ""}> ${location.name}`;
+        label.innerHTML = `<input type="checkbox" data-location-id="${location.id}" ${index < 2 ? "checked" : ""}> ${location.name}`;
+        label.querySelector("input").addEventListener("change", () => {
+          selectedLocationId = null;
+          renderRoutePicker();
+          renderLocationPicker();
+        });
         routeLocations.append(label);
       });
     }
@@ -1582,12 +1599,14 @@
       const grid = byId("routePickerGrid");
       const picker = byId("routePicker");
       const preview = byId("mobilePreview");
-      if (!grid || !picker || !preview) return;
+      const locationPicker = byId("locationPicker");
+      if (!grid || !picker || !preview || !locationPicker) return;
 
       const routes = routeOptions();
       const selected = routes.find(route => route.id === selectedRouteId);
       picker.hidden = !!selected;
-      preview.hidden = !selected;
+      locationPicker.hidden = !selected || !!selectedLocationId || (selected.locations || []).length <= 1;
+      preview.hidden = !selected || (!selectedLocationId && (selected.locations || []).length > 1);
       grid.innerHTML = "";
 
       routes.forEach(route => {
@@ -1595,23 +1614,59 @@
         button.className = `route-card${route.id === selectedRouteId ? " active" : ""}`;
         button.innerHTML = `
           <strong>${route.title}</strong>
-          <span>${route.location}<br>${route.detail}</span>
-          <small>Iniciar checklist</small>
+          <span>${route.detail}</span>
+          <small>Selecionar roteiro</small>
         `;
         button.addEventListener("click", () => {
           selectedRouteId = route.id;
+          selectedLocationId = route.locations.length === 1 ? route.locations[0].id : null;
           mobileStepIndex = 0;
           mobileAnswers = {};
           renderRoutePicker();
+          renderLocationPicker();
           renderMobileItems();
         });
         grid.append(button);
       });
 
       if (selected) {
+        const activeLocation = selected.locations.find(location => location.id === selectedLocationId) || selected.locations[0];
         byId("mobileRouteTitle").textContent = selected.title;
-        byId("mobileRouteSubtitle").textContent = `${selected.location} - checklist em andamento`;
+        byId("mobileRouteSubtitle").textContent = `${activeLocation.name} - checklist em andamento`;
       }
+    }
+
+    function renderLocationPicker() {
+      const grid = byId("locationPickerGrid");
+      const picker = byId("locationPicker");
+      const route = routeOptions().find(option => option.id === selectedRouteId);
+      if (!grid || !picker) return;
+
+      grid.innerHTML = "";
+      if (!route || route.locations.length <= 1 || selectedLocationId) {
+        picker.hidden = true;
+        return;
+      }
+
+      picker.hidden = false;
+      route.locations.forEach(location => {
+        const button = document.createElement("button");
+        button.className = "route-card";
+        button.innerHTML = `
+          <strong>${location.name}</strong>
+          <span>${location.type}<br>${location.address || "Endereco nao informado"}</span>
+          <small>Iniciar neste local</small>
+        `;
+        button.addEventListener("click", () => {
+          selectedLocationId = location.id;
+          mobileStepIndex = 0;
+          mobileAnswers = {};
+          renderRoutePicker();
+          renderLocationPicker();
+          renderMobileItems();
+        });
+        grid.append(button);
+      });
     }
 
     function renderTypeGrid() {
@@ -1850,7 +1905,13 @@
     function renderMobileItems() {
       const target = byId("mobileItems");
       renderRoutePicker();
+      renderLocationPicker();
       if (!selectedRouteId) {
+        target.innerHTML = "";
+        return;
+      }
+      const selectedRoute = routeOptions().find(option => option.id === selectedRouteId);
+      if (selectedRoute && selectedRoute.locations.length > 1 && !selectedLocationId) {
         target.innerHTML = "";
         return;
       }
@@ -2128,12 +2189,13 @@
 
     function publishChecklist() {
       const route = routeOptions().find(option => option.id === selectedRouteId) || routeOptions()[0];
+      const activeLocation = route.locations.find(location => location.id === selectedLocationId) || route.locations[0];
       const now = new Date();
       const id = String(Date.now()).slice(-10);
       publishedChecklists.unshift({
         id,
         division: "Sul de Minas",
-        branch: "Pouso Alegre",
+        branch: activeLocation.name.replace("Unico Logistica - ", ""),
         route: route.title,
         object: "Checklist publicado",
         created: now.toLocaleDateString("pt-BR") + " - " + now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
@@ -2217,6 +2279,7 @@
     byId("routeTitle").addEventListener("input", () => {
       renderRouteSummary();
       renderRoutePicker();
+      renderLocationPicker();
     });
     byId("routeSummaryHeader").addEventListener("click", () => {
       routeSummaryOpen = !routeSummaryOpen;
