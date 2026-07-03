@@ -718,6 +718,51 @@
       overflow: hidden;
     }
 
+    .route-picker {
+      max-width: 920px;
+      margin-bottom: 22px;
+    }
+
+    .route-picker-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .route-card {
+      text-align: left;
+      border: 1px solid var(--line);
+      background: #fff;
+      padding: 16px;
+      min-height: 124px;
+      color: var(--ink);
+    }
+
+    .route-card:hover,
+    .route-card.active {
+      border-color: var(--brand);
+      box-shadow: 0 8px 18px rgba(23, 50, 59, .1);
+    }
+
+    .route-card strong {
+      display: block;
+      color: var(--navy);
+      margin-bottom: 8px;
+    }
+
+    .route-card span {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+      margin-bottom: 12px;
+    }
+
+    .route-card small {
+      color: var(--brand-dark);
+      font-weight: 700;
+    }
+
     .phone-top {
       background: var(--navy);
       color: #fff;
@@ -865,6 +910,7 @@
       .grid.two,
       .stats,
       .branch-summary,
+      .route-picker-grid,
       .form-row,
       .check-grid {
         grid-template-columns: 1fr;
@@ -1078,13 +1124,19 @@
           <div class="page-title">
             <div>
               <h1>Aplicativo do motorista</h1>
-              <p class="lead">Tela de preenchimento responsiva, preparada para uso em celular durante recebimento ou entrega.</p>
+              <p class="lead">Selecione um roteiro criado para iniciar o preenchimento em campo.</p>
             </div>
           </div>
-          <div class="mobile-preview">
+          <section class="panel route-picker" id="routePicker">
+            <div class="panel-header"><h2>Escolher roteiro</h2></div>
+            <div class="panel-body">
+              <div class="route-picker-grid" id="routePickerGrid"></div>
+            </div>
+          </section>
+          <div class="mobile-preview" id="mobilePreview" hidden>
             <div class="phone-top">
-              <strong>Recebimento UNICO</strong>
-              <span>Matriz Pouso Alegre - checklist em andamento</span>
+              <strong id="mobileRouteTitle">Recebimento UNICO</strong>
+              <span id="mobileRouteSubtitle">Matriz Pouso Alegre - checklist em andamento</span>
             </div>
             <div class="phone-body" id="mobileItems"></div>
           </div>
@@ -1225,6 +1277,7 @@
     let items = JSON.parse(JSON.stringify(initialItems));
     let expandedItemId = null;
     let routeSummaryOpen = false;
+    let selectedRouteId = null;
 
     const views = document.querySelectorAll(".view");
     const navButtons = document.querySelectorAll(".nav-button");
@@ -1241,9 +1294,24 @@
     }
 
     function setView(id) {
+      if (id === "mobile") selectedRouteId = null;
       views.forEach(view => view.classList.toggle("active", view.id === id));
       navButtons.forEach(button => button.classList.toggle("active", button.dataset.view === id));
+      renderRoutePicker();
+      renderMobileItems();
       window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function routeOptions() {
+      const title = byId("routeTitle")?.value.trim() || "Recebimento de cargas - UNICO";
+      return [
+        {
+          id: "main",
+          title,
+          location: "Matriz Pouso Alegre",
+          detail: `${items.length} itens cadastrados`
+        }
+      ];
     }
 
     function input(value, placeholder, onChange) {
@@ -1346,6 +1414,40 @@
       byId("routeSummaryTitle").textContent = title;
       byId("routeSummaryBody").hidden = !routeSummaryOpen;
       byId("toggleRouteSummary").textContent = routeSummaryOpen ? "Recolher" : "Expandir";
+    }
+
+    function renderRoutePicker() {
+      const grid = byId("routePickerGrid");
+      const picker = byId("routePicker");
+      const preview = byId("mobilePreview");
+      if (!grid || !picker || !preview) return;
+
+      const routes = routeOptions();
+      const selected = routes.find(route => route.id === selectedRouteId);
+      picker.hidden = !!selected;
+      preview.hidden = !selected;
+      grid.innerHTML = "";
+
+      routes.forEach(route => {
+        const button = document.createElement("button");
+        button.className = `route-card${route.id === selectedRouteId ? " active" : ""}`;
+        button.innerHTML = `
+          <strong>${route.title}</strong>
+          <span>${route.location}<br>${route.detail}</span>
+          <small>Iniciar checklist</small>
+        `;
+        button.addEventListener("click", () => {
+          selectedRouteId = route.id;
+          renderRoutePicker();
+          renderMobileItems();
+        });
+        grid.append(button);
+      });
+
+      if (selected) {
+        byId("mobileRouteTitle").textContent = selected.title;
+        byId("mobileRouteSubtitle").textContent = `${selected.location} - checklist em andamento`;
+      }
     }
 
     function renderTypeGrid() {
@@ -1583,6 +1685,11 @@
 
     function renderMobileItems() {
       const target = byId("mobileItems");
+      renderRoutePicker();
+      if (!selectedRouteId) {
+        target.innerHTML = "";
+        return;
+      }
       target.innerHTML = "";
       items.forEach((item, index) => {
         const card = document.createElement("article");
@@ -1690,7 +1797,10 @@
       if (event.target === modal) modal.classList.remove("open");
     });
     byId("historySearch").addEventListener("input", renderDashboard);
-    byId("routeTitle").addEventListener("input", renderRouteSummary);
+    byId("routeTitle").addEventListener("input", () => {
+      renderRouteSummary();
+      renderRoutePicker();
+    });
     byId("routeSummaryHeader").addEventListener("click", () => {
       routeSummaryOpen = !routeSummaryOpen;
       renderRouteSummary();
