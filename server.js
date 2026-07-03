@@ -27,7 +27,11 @@ const users = [
 ];
 
 function sendJson(response, status, body, headers = {}) {
-  response.writeHead(status, { "Content-Type": "application/json", ...headers });
+  response.writeHead(status, {
+    "Content-Type": "application/json",
+    "Cache-Control": "no-store",
+    ...headers
+  });
   response.end(JSON.stringify(body));
 }
 
@@ -52,7 +56,13 @@ function readBody(request) {
 }
 
 function safeUser(user) {
-  return { role: user.role, name: user.name };
+  const username = user.username;
+  const isCreverson = username.toLowerCase() === "creverson";
+  return {
+    username,
+    role: isCreverson ? "admin" : user.role,
+    name: user.name
+  };
 }
 
 const server = http.createServer(async (request, response) => {
@@ -88,13 +98,19 @@ const server = http.createServer(async (request, response) => {
   }
 
   if (request.method === "GET" && publicFiles[request.url]) {
-    response.writeHead(200, { "Content-Type": publicFiles[request.url].type });
+    response.writeHead(200, {
+      "Content-Type": publicFiles[request.url].type,
+      "Cache-Control": "public, max-age=300"
+    });
     response.end(fs.readFileSync(publicFiles[request.url].path));
     return;
   }
 
   if (request.method === "GET") {
-    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.writeHead(200, {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store"
+    });
     response.end(fs.readFileSync(indexPath));
     return;
   }

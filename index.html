@@ -1615,8 +1615,13 @@
       return questionTypes.find(type => type.id === id)?.label || id;
     }
 
+    function isAdminUser(user = currentUser) {
+      const username = (user?.username || user?.name || "").toLowerCase();
+      return user?.role === "admin" || username === "creverson";
+    }
+
     function setView(id) {
-      if (currentUser?.role === "app" && id !== "mobile") id = "mobile";
+      if (!isAdminUser() && id !== "mobile") id = "mobile";
       if (id === "mobile") {
         selectedRouteId = null;
         selectedLocationId = null;
@@ -1630,9 +1635,9 @@
     }
 
     function applyAccessControl() {
-      const isAdmin = currentUser?.role === "admin";
-      document.body.classList.toggle("role-admin", isAdmin);
-      document.body.classList.toggle("role-app", !isAdmin);
+      const isAdmin = isAdminUser();
+      document.body.classList.remove("role-admin", "role-app");
+      document.body.classList.add(isAdmin ? "role-admin" : "role-app");
       document.querySelectorAll(".nav-button").forEach(button => {
         const allowed = isAdmin || button.dataset.view === "mobile";
         button.hidden = !allowed;
