@@ -1657,7 +1657,7 @@
         const target = button.dataset.viewTrigger;
         button.hidden = !isAdmin && target !== "mobile";
       });
-      byId("userBadge").textContent = `${currentUser.name} - ${isAdmin ? "Administrador" : "Usuario normal"}`;
+      byId("userBadge").textContent = `${currentUser?.name || "Usuario"} - ${isAdmin ? "Administrador" : "Usuario normal"}`;
       if (!isAdmin) {
         views.forEach(view => view.classList.toggle("active", view.id === "mobile"));
         navButtons.forEach(button => button.classList.toggle("active", button.dataset.view === "mobile"));
@@ -1670,11 +1670,15 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password, remember })
-      });
-      const result = await response.json().catch(() => ({}));
+      }).catch(() => null);
+      const result = response ? await response.json().catch(() => ({})) : {};
 
-      if (!response.ok) {
+      if (!response || !response.ok) {
         byId("loginError").textContent = result.error || "Usuario ou senha invalidos.";
+        return;
+      }
+      if (!result.user) {
+        byId("loginError").textContent = "Login do servidor indisponivel. Publique como Web Service no Render.";
         return;
       }
       currentUser = result.user;
