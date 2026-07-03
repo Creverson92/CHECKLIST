@@ -146,6 +146,14 @@
       line-height: 1.2;
     }
 
+    .mobile-logout {
+      display: none;
+    }
+
+    body.role-app .mobile-logout {
+      display: inline-flex;
+    }
+
     body.role-app .route-picker .panel-body {
       padding: 0;
     }
@@ -1397,7 +1405,10 @@
 
         <section class="view" id="mobile">
           <section class="panel route-picker" id="routePicker">
-            <div class="panel-header"><h2>Escolher roteiro</h2></div>
+            <div class="panel-header">
+              <h2>Escolher roteiro</h2>
+              <button class="btn small mobile-logout" type="button" data-mobile-logout>Sair</button>
+            </div>
             <div class="panel-body">
               <div class="route-picker-grid" id="routePickerGrid"></div>
             </div>
@@ -2514,6 +2525,7 @@
       login(byId("loginUser").value, byId("loginPassword").value, byId("rememberLogin").checked);
     });
     byId("logoutButton").addEventListener("click", logout);
+    document.querySelectorAll("[data-mobile-logout]").forEach(button => button.addEventListener("click", logout));
     navButtons.forEach(button => button.addEventListener("click", () => setView(button.dataset.view)));
     triggers.forEach(button => button.addEventListener("click", () => setView(button.dataset.viewTrigger)));
     byId("openTypeModal").addEventListener("click", () => modal.classList.add("open"));
