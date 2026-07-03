@@ -805,6 +805,37 @@
       margin-bottom: 10px;
     }
 
+    .step-progress {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .step-progress strong {
+      color: var(--brand-dark);
+    }
+
+    .mobile-warning {
+      color: var(--red);
+      font-size: 12px;
+      font-weight: 650;
+      min-height: 18px;
+    }
+
+    .mobile-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: space-between;
+      margin-top: 4px;
+    }
+
+    .mobile-actions .btn {
+      flex: 1;
+    }
+
     .choice {
       display: flex;
       align-items: center;
@@ -1278,6 +1309,8 @@
     let expandedItemId = null;
     let routeSummaryOpen = false;
     let selectedRouteId = null;
+    let mobileStepIndex = 0;
+    let mobileAnswers = {};
 
     const views = document.querySelectorAll(".view");
     const navButtons = document.querySelectorAll(".nav-button");
@@ -1438,6 +1471,8 @@
         `;
         button.addEventListener("click", () => {
           selectedRouteId = route.id;
+          mobileStepIndex = 0;
+          mobileAnswers = {};
           renderRoutePicker();
           renderMobileItems();
         });
@@ -1691,44 +1726,122 @@
         return;
       }
       target.innerHTML = "";
-      items.forEach((item, index) => {
-        const card = document.createElement("article");
-        card.className = "answer-card";
-        card.innerHTML = `<h3>${index + 1}. ${item.title}${item.required ? " *" : ""}</h3><p>${item.support || typeLabel(item.type)}</p>`;
-        const body = document.createElement("div");
+      if (!items.length) {
+        target.innerHTML = `<div class="empty-state">Nenhuma pergunta cadastrada para este roteiro.</div>`;
+        return;
+      }
 
-        if (["multi", "single", "positive"].includes(item.type)) {
-          (item.options || []).forEach(option => {
-            const label = document.createElement("label");
-            label.className = "choice";
-            label.innerHTML = `<input type="${item.type === "multi" ? "checkbox" : "radio"}" name="q${item.id}"> ${option}`;
-            body.append(label);
+      if (mobileStepIndex >= items.length) {
+        target.innerHTML = `
+          <article class="answer-card">
+            <h3>Checklist concluido</h3>
+            <p>Todas as perguntas obrigatorias foram preenchidas.</p>
+            <button class="btn primary" data-restart-mobile>Iniciar novamente</button>
+          </article>
+        `;
+        target.querySelector("[data-restart-mobile]").addEventListener("click", () => {
+          mobileStepIndex = 0;
+          mobileAnswers = {};
+          renderMobileItems();
+        });
+        return;
+      }
+
+      const item = items[mobileStepIndex];
+      const card = document.createElement("article");
+      card.className = "answer-card";
+      card.innerHTML = `
+        <div class="step-progress"><span>Pergunta ${mobileStepIndex + 1} de ${items.length}</span><strong>${item.required ? "Obrigatoria" : "Opcional"}</strong></div>
+        <h3>${mobileStepIndex + 1}. ${item.title}${item.required ? " *" : ""}</h3>
+        <p>${item.support || typeLabel(item.type)}</p>
+      `;
+      const body = document.createElement("div");
+      const answer = mobileAnswers[item.id] || {};
+
+      if (["multi", "single", "positive"].includes(item.type)) {
+        (item.options || []).forEach(option => {
+          const label = document.createElement("label");
+          label.className = "choice";
+          const checked = Array.isArray(answer.value) ? answer.value.includes(option) : answer.value === option;
+          label.innerHTML = `<input type="${item.type === "multi" ? "checkbox" : "radio"}" name="q${item.id}" ${checked ? "checked" : ""}> ${option}`;
+          const inputEl = label.querySelector("input");
+          inputEl.addEventListener("change", () => {
+            if (item.type === "multi") {
+              const current = new Set(mobileAnswers[item.id]?.value || []);
+              inputEl.checked ? current.add(option) : current.delete(option);
+              mobileAnswers[item.id] = { ...mobileAnswers[item.id], value: [...current] };
+            } else {
+              mobileAnswers[item.id] = { ...mobileAnswers[item.id], value: option };
+            }
           });
-        } else if (item.type === "media") {
-          body.innerHTML = `<label class="photo-drop"><input type="file" accept="image/*" capture="environment" multiple style="display:none"> Abrir camera ou galeria</label><small>Minimo ${item.min || 1}, maximo ${item.max || 30} imagens</small>`;
-        } else if (item.type === "number") {
-          body.innerHTML = `<input type="number" placeholder="Digite o numero da nota fiscal">`;
-        } else if (item.type === "text") {
-          body.innerHTML = `<input type="text" placeholder="Digite o nome completo">`;
-        } else if (item.type === "date") {
-          body.innerHTML = `<input type="date">`;
-        } else if (item.type === "barcode") {
-          body.innerHTML = `<input type="text" placeholder="Bipe ou digite o codigo"><button class="btn small" style="margin-top:8px;">Ler codigo</button><p style="margin-top:8px;">Use leitor fisico, camera do celular ou entrada manual.</p>`;
-        } else if (item.type === "signature") {
-          body.innerHTML = `<canvas class="signature" width="330" height="120"></canvas><button class="btn small" style="margin-top:8px;" data-clear-signature>Limpar assinatura</button>`;
-        }
+          body.append(label);
+        });
+      } else if (item.type === "media") {
+        body.innerHTML = `<label class="photo-drop"><input type="file" accept="image/*" capture="environment" multiple style="display:none"> Abrir camera ou galeria</label><small>Minimo ${item.min || 1}, maximo ${item.max || 30} imagens</small>`;
+        body.querySelector("input").addEventListener("change", event => {
+          mobileAnswers[item.id] = { ...mobileAnswers[item.id], value: event.target.files.length };
+        });
+      } else if (item.type === "number") {
+        body.innerHTML = `<input type="number" placeholder="Digite o numero da nota fiscal" value="${answer.value || ""}">`;
+        body.querySelector("input").addEventListener("input", event => mobileAnswers[item.id] = { ...mobileAnswers[item.id], value: event.target.value });
+      } else if (item.type === "text") {
+        body.innerHTML = `<input type="text" placeholder="Digite o nome completo" value="${answer.value || ""}">`;
+        body.querySelector("input").addEventListener("input", event => mobileAnswers[item.id] = { ...mobileAnswers[item.id], value: event.target.value });
+      } else if (item.type === "date") {
+        body.innerHTML = `<input type="date" value="${answer.value || ""}">`;
+        body.querySelector("input").addEventListener("input", event => mobileAnswers[item.id] = { ...mobileAnswers[item.id], value: event.target.value });
+      } else if (item.type === "barcode") {
+        body.innerHTML = `<input type="text" placeholder="Bipe ou digite o codigo" value="${answer.value || ""}"><button class="btn small" style="margin-top:8px;">Ler codigo</button><p style="margin-top:8px;">Use leitor fisico, camera do celular ou entrada manual.</p>`;
+        body.querySelector("input").addEventListener("input", event => mobileAnswers[item.id] = { ...mobileAnswers[item.id], value: event.target.value });
+      } else if (item.type === "signature") {
+        body.innerHTML = `<canvas class="signature" width="330" height="120" data-signature-id="${item.id}"></canvas><button class="btn small" style="margin-top:8px;" data-clear-signature>Limpar assinatura</button>`;
+      }
 
-        if (item.observations) {
-          const obs = document.createElement("textarea");
-          obs.placeholder = "Observacoes";
-          obs.style.marginTop = "10px";
-          body.append(obs);
-        }
+      if (item.observations) {
+        const obs = document.createElement("textarea");
+        obs.placeholder = "Observacoes";
+        obs.style.marginTop = "10px";
+        obs.value = answer.observation || "";
+        obs.addEventListener("input", event => mobileAnswers[item.id] = { ...mobileAnswers[item.id], observation: event.target.value });
+        body.append(obs);
+      }
 
-        card.append(body);
-        target.append(card);
+      const warning = document.createElement("div");
+      warning.className = "mobile-warning";
+      const actions = document.createElement("div");
+      actions.className = "mobile-actions";
+      const back = document.createElement("button");
+      back.className = "btn";
+      back.textContent = "Voltar";
+      back.disabled = mobileStepIndex === 0;
+      back.addEventListener("click", () => {
+        if (mobileStepIndex > 0) mobileStepIndex -= 1;
+        renderMobileItems();
       });
+      const next = document.createElement("button");
+      next.className = "btn primary";
+      next.textContent = mobileStepIndex === items.length - 1 ? "Finalizar" : "Proxima";
+      next.addEventListener("click", () => {
+        if (!isMobileAnswerValid(item)) {
+          warning.textContent = "Preencha esta pergunta obrigatoria antes de continuar.";
+          return;
+        }
+        mobileStepIndex += 1;
+        renderMobileItems();
+      });
+      actions.append(back, next);
+      card.append(body, warning, actions);
+      target.append(card);
       setupSignaturePads();
+    }
+
+    function isMobileAnswerValid(item) {
+      if (!item.required) return true;
+      const answer = mobileAnswers[item.id];
+      if (!answer || answer.value === undefined || answer.value === null) return false;
+      if (Array.isArray(answer.value)) return answer.value.length > 0;
+      if (typeof answer.value === "number") return answer.value > 0;
+      return String(answer.value).trim().length > 0;
     }
 
     function setupSignaturePads() {
@@ -1750,6 +1863,9 @@
 
         function start(event) {
           drawing = true;
+          if (canvas.dataset.signatureId) {
+            mobileAnswers[canvas.dataset.signatureId] = { ...mobileAnswers[canvas.dataset.signatureId], value: true };
+          }
           const p = point(event);
           ctx.beginPath();
           ctx.moveTo(p.x, p.y);
@@ -1776,7 +1892,10 @@
         canvas.addEventListener("touchend", end);
 
         const clear = canvas.parentElement.querySelector("[data-clear-signature]");
-        if (clear) clear.addEventListener("click", () => ctx.clearRect(0, 0, canvas.width, canvas.height));
+        if (clear) clear.addEventListener("click", () => {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          if (canvas.dataset.signatureId) mobileAnswers[canvas.dataset.signatureId] = { ...mobileAnswers[canvas.dataset.signatureId], value: false };
+        });
       });
     }
 
