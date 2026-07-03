@@ -279,6 +279,105 @@
       margin: 8px 0 3px;
     }
 
+    .branch-summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 16px;
+      margin-bottom: 22px;
+    }
+
+    .branch-card {
+      background: #fff;
+      border: 1px solid var(--line);
+      box-shadow: 0 8px 18px rgba(23, 50, 59, .1);
+      padding: 18px;
+      min-height: 104px;
+    }
+
+    .branch-card span {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+
+    .branch-card strong {
+      display: block;
+      color: var(--brand-dark);
+      font-size: 30px;
+      line-height: 1;
+      margin-bottom: 10px;
+    }
+
+    .branch-card small {
+      color: var(--ink);
+    }
+
+    .history-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .history-toolbar h2 {
+      margin: 0;
+    }
+
+    .history-search {
+      min-width: 260px;
+      border: 1px solid var(--line);
+      background: #fff;
+      min-height: 38px;
+      padding: 0 12px;
+    }
+
+    .history-table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+
+    .history-table {
+      width: 100%;
+      min-width: 980px;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .history-table th,
+    .history-table td {
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    .history-table th {
+      color: var(--brand-dark);
+      background: #f7fbfc;
+      font-weight: 700;
+    }
+
+    .history-table tbody tr:nth-child(even) {
+      background: #f7f9fa;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      min-width: 150px;
+      min-height: 22px;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      background: #51b86a;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
     .form-row {
       display: grid;
       gap: 14px;
@@ -687,9 +786,20 @@
 
       .grid.two,
       .stats,
+      .branch-summary,
       .form-row,
       .check-grid {
         grid-template-columns: 1fr;
+      }
+
+      .history-toolbar {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .history-search {
+        min-width: 0;
+        width: 100%;
       }
 
       .steps,
@@ -766,34 +876,36 @@
         <section class="view active" id="dashboard">
           <div class="page-title">
             <div>
-              <h1>Checklist operacional</h1>
-              <p class="lead">Controle de recebimento, veiculo, nota fiscal, motorista, evidencia, leitura de codigo e assinatura em campo.</p>
+              <h1>Historico</h1>
+              <p class="lead">Acompanhe os checklists executados por divisao e filial operacional.</p>
             </div>
+            <button class="btn primary">Exportar planilha</button>
           </div>
 
-          <div class="stats">
-            <div class="stat"><span>Roteiros ativos</span><strong id="statRoutes">1</strong><small>Modelo de recebimento</small></div>
-            <div class="stat"><span>Localidades</span><strong id="statLocations">3</strong><small>Matriz e filiais</small></div>
-            <div class="stat"><span>Tipos de pergunta</span><strong>9</strong><small>Inclui midia e assinatura</small></div>
-            <div class="stat"><span>Status</span><strong>98%</strong><small>Pronto para piloto</small></div>
+          <div class="branch-summary" id="branchSummary"></div>
+
+          <div class="history-toolbar">
+            <h2>Historico por filial</h2>
+            <input class="history-search" id="historySearch" placeholder="Pesquisar por checklist, filial ou executor">
           </div>
 
-          <div style="margin-top: 18px;">
-            <section class="panel">
-              <div class="panel-header">
-                <h2>Execucao em campo</h2>
-                <button class="btn small" data-view-trigger="mobile">Ver app</button>
-              </div>
-              <div class="panel-body">
-                <p class="lead">O motorista ou conferente preenche pelo celular, anexa fotos, informa notas fiscais, faz leitura de codigos e assina na tela.</p>
-                <div class="pill-row" style="margin-top: 14px;">
-                  <span class="pill active">Recebimento</span>
-                  <span class="pill">Frota</span>
-                  <span class="pill">Documentos</span>
-                  <span class="pill">Entrega</span>
-                </div>
-              </div>
-            </section>
+          <div class="history-table-wrap">
+            <table class="history-table">
+              <thead>
+                <tr>
+                  <th>Checklist</th>
+                  <th>Divisao</th>
+                  <th>Filial</th>
+                  <th>Roteiro</th>
+                  <th>Objeto</th>
+                  <th>Criado em</th>
+                  <th>Finalizado em</th>
+                  <th>Executor</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="historyRows"></tbody>
+            </table>
           </div>
         </section>
 
@@ -931,6 +1043,16 @@
       { id: 3, name: "Unico Logistica - Filial Sao Paulo", type: "Filial", address: "Av. Brig. Faria Lima, Sao Paulo-SP" }
     ];
 
+    const historyItems = [
+      { id: "1802071277", division: "Sul de Minas", branch: "Pouso Alegre", route: "Recebimento hospitalar", object: "182958", created: "03/07/2026 - 10:42", finished: "03/07/2026 - 10:58", executor: "Unico Group", status: "Execucao finalizada" },
+      { id: "1405817523", division: "Sul de Minas", branch: "Pouso Alegre", route: "Recebimento hospitalar", object: "1035600", created: "03/07/2026 - 10:21", finished: "03/07/2026 - 10:39", executor: "Unico Group", status: "Execucao finalizada" },
+      { id: "40924075", division: "Sao Paulo", branch: "Sao Paulo", route: "Expedicao verallia", object: "166098", created: "03/07/2026 - 10:08", finished: "03/07/2026 - 10:16", executor: "Unico Group", status: "Execucao finalizada" },
+      { id: "1235983524", division: "Sul de Minas", branch: "Pouso Alegre", route: "Recebimento fiscal", object: "377362", created: "03/07/2026 - 09:46", finished: "03/07/2026 - 10:04", executor: "Unico Group", status: "Execucao finalizada" },
+      { id: "1804811580", division: "Sul de Minas", branch: "Extrema", route: "Expedicao hospitalar", object: "EXP 1 FUVS", created: "03/07/2026 - 09:11", finished: "03/07/2026 - 09:34", executor: "Conferente 2", status: "Execucao finalizada" },
+      { id: "1509827083", division: "Sao Paulo", branch: "Sao Paulo", route: "Expedicao verallia", object: "expedicao 5449", created: "02/07/2026 - 18:22", finished: "02/07/2026 - 20:01", executor: "Conferente 2", status: "Execucao finalizada" },
+      { id: "1095444455", division: "Sul de Minas", branch: "Extrema", route: "Recebimento hospitalar", object: "10553", created: "02/07/2026 - 17:04", finished: "02/07/2026 - 17:29", executor: "Unico Group", status: "Execucao finalizada" }
+    ];
+
     const initialItems = [
       {
         id: 101,
@@ -1060,7 +1182,8 @@
     }
 
     function renderLocations() {
-      byId("statLocations").textContent = locations.length;
+      const statLocations = byId("statLocations");
+      if (statLocations) statLocations.textContent = locations.length;
       const list = byId("locationList");
       list.innerHTML = "";
 
@@ -1087,6 +1210,50 @@
         label.innerHTML = `<input type="checkbox" ${index < 2 ? "checked" : ""}> ${location.name}`;
         routeLocations.append(label);
       });
+    }
+
+    function renderDashboard() {
+      const summary = byId("branchSummary");
+      const rows = byId("historyRows");
+      if (!summary || !rows) return;
+
+      const query = (byId("historySearch")?.value || "").trim().toLowerCase();
+      const filtered = historyItems.filter(item => {
+        const text = `${item.id} ${item.division} ${item.branch} ${item.route} ${item.object} ${item.executor}`.toLowerCase();
+        return text.includes(query);
+      });
+      const branches = [...new Set(historyItems.map(item => item.branch))];
+
+      summary.innerHTML = "";
+      branches.forEach(branch => {
+        const branchItems = historyItems.filter(item => item.branch === branch);
+        const divisions = [...new Set(branchItems.map(item => item.division))].join(" / ");
+        const card = document.createElement("article");
+        card.className = "branch-card";
+        card.innerHTML = `<span>${divisions}</span><strong>${branchItems.length}</strong><small>${branch}</small>`;
+        summary.append(card);
+      });
+
+      rows.innerHTML = "";
+      filtered.forEach(item => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${item.id}</td>
+          <td>${item.division}</td>
+          <td>${item.branch}</td>
+          <td>${item.route}</td>
+          <td>${item.object}</td>
+          <td>${item.created}</td>
+          <td>${item.finished}</td>
+          <td>${item.executor}</td>
+          <td><span class="status-pill">${item.status}</span></td>
+        `;
+        rows.append(row);
+      });
+
+      if (!filtered.length) {
+        rows.innerHTML = `<tr><td colspan="9">Nenhum checklist encontrado para a pesquisa.</td></tr>`;
+      }
     }
 
     function renderTypeGrid() {
@@ -1390,10 +1557,10 @@
 
     function renderAll() {
       renderLocations();
+      renderDashboard();
       renderTypeGrid();
       renderBuilderItems("builderItems");
       renderMobileItems();
-      byId("statRoutes").textContent = "1";
     }
 
     navButtons.forEach(button => button.addEventListener("click", () => setView(button.dataset.view)));
@@ -1403,6 +1570,7 @@
     modal.addEventListener("click", event => {
       if (event.target === modal) modal.classList.remove("open");
     });
+    byId("historySearch").addEventListener("input", renderDashboard);
 
     byId("addLocation").addEventListener("click", () => {
       const name = byId("locationName").value.trim();
