@@ -1541,7 +1541,7 @@
         const target = button.dataset.viewTrigger;
         button.hidden = !isAdmin && target !== "mobile";
       });
-      byId("userBadge").textContent = `${currentUser.name} - ${isAdmin ? "Administrador" : "Aplicativo"}`;
+      byId("userBadge").textContent = `${currentUser.name} - ${isAdmin ? "Administrador" : "Usuario normal"}`;
       setView(isAdmin ? "dashboard" : "mobile");
     }
 
