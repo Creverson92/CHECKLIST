@@ -88,6 +88,11 @@
       display: none;
     }
 
+    body.role-app .nav-button:not([data-view="mobile"]),
+    body.role-app [data-view-trigger]:not([data-view-trigger="mobile"]) {
+      display: none;
+    }
+
     .sidebar {
       background: var(--navy);
       color: #fff;
@@ -1533,6 +1538,8 @@
 
     function applyAccessControl() {
       const isAdmin = currentUser?.role === "admin";
+      document.body.classList.toggle("role-admin", isAdmin);
+      document.body.classList.toggle("role-app", !isAdmin);
       document.querySelectorAll(".nav-button").forEach(button => {
         const allowed = isAdmin || button.dataset.view === "mobile";
         button.hidden = !allowed;
@@ -1565,9 +1572,27 @@
       renderAll();
     }
 
+    async function restoreSession() {
+      const response = await fetch("/api/session").catch(() => null);
+      const result = response ? await response.json().catch(() => ({})) : {};
+      if (!result.user) {
+        byId("appShell").hidden = true;
+        byId("loginScreen").hidden = false;
+        byId("loginUser").focus();
+        return;
+      }
+
+      currentUser = result.user;
+      byId("loginScreen").hidden = true;
+      byId("appShell").hidden = false;
+      applyAccessControl();
+      renderAll();
+    }
+
     async function logout() {
       await fetch("/api/logout", { method: "POST" }).catch(() => {});
       currentUser = null;
+      document.body.classList.remove("role-admin", "role-app");
       selectedRouteId = null;
       selectedLocationId = null;
       mobileStepIndex = 0;
@@ -2435,7 +2460,7 @@
       renderAll();
     });
 
-    renderAll();
+    restoreSession();
   </script>
 </body>
 </html>
