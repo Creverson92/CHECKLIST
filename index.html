@@ -900,11 +900,50 @@
 
     .signature {
       width: 100%;
-      height: 120px;
+      height: 220px;
       background: #fff;
       border: 1px solid var(--line);
       touch-action: none;
       display: block;
+    }
+
+    .signature-shell {
+      display: grid;
+      gap: 10px;
+      background: #f6fafb;
+      border: 1px solid var(--line);
+      padding: 10px;
+    }
+
+    .signature-shell:fullscreen {
+      width: 100vw;
+      height: 100vh;
+      padding: 16px;
+      background: #f6fafb;
+      display: flex;
+      flex-direction: column;
+      justify-content: stretch;
+    }
+
+    .signature-shell:fullscreen .signature {
+      flex: 1;
+      height: auto;
+      min-height: 0;
+    }
+
+    .signature-shell:fullscreen .signature-tools {
+      flex: 0 0 auto;
+    }
+
+    .signature-tools {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .signature-tools .btn {
+      flex: 1;
+      min-width: 130px;
     }
 
     .kbd {
@@ -1909,7 +1948,15 @@
         body.querySelector("input").addEventListener("input", event => mobileAnswers[item.id] = { ...mobileAnswers[item.id], value: event.target.value });
         body.querySelector("[data-open-scanner]").addEventListener("click", () => openScanner(item.id));
       } else if (item.type === "signature") {
-        body.innerHTML = `<canvas class="signature" width="330" height="120" data-signature-id="${item.id}"></canvas><button class="btn small" style="margin-top:8px;" data-clear-signature>Limpar assinatura</button>`;
+        body.innerHTML = `
+          <div class="signature-shell" data-signature-shell>
+            <canvas class="signature" width="720" height="320" data-signature-id="${item.id}"></canvas>
+            <div class="signature-tools">
+              <button class="btn small" data-full-signature type="button">Tela cheia</button>
+              <button class="btn small" data-clear-signature type="button">Limpar assinatura</button>
+            </div>
+          </div>
+        `;
       }
 
       if (item.observations) {
@@ -1963,17 +2010,26 @@
     function setupSignaturePads() {
       document.querySelectorAll(".signature").forEach(canvas => {
         const ctx = canvas.getContext("2d");
-        ctx.lineWidth = 2;
-        ctx.lineCap = "round";
-        ctx.strokeStyle = "#17323b";
         let drawing = false;
+
+        function resizeCanvas() {
+          const rect = canvas.getBoundingClientRect();
+          const ratio = window.devicePixelRatio || 1;
+          if (!rect.width || !rect.height) return;
+          canvas.width = Math.floor(rect.width * ratio);
+          canvas.height = Math.floor(rect.height * ratio);
+          ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+          ctx.lineWidth = 2.6;
+          ctx.lineCap = "round";
+          ctx.strokeStyle = "#17323b";
+        }
 
         function point(event) {
           const rect = canvas.getBoundingClientRect();
           const touch = event.touches ? event.touches[0] : event;
           return {
-            x: (touch.clientX - rect.left) * (canvas.width / rect.width),
-            y: (touch.clientY - rect.top) * (canvas.height / rect.height)
+            x: touch.clientX - rect.left,
+            y: touch.clientY - rect.top
           };
         }
 
@@ -2006,6 +2062,26 @@
         canvas.addEventListener("touchstart", start, { passive: false });
         canvas.addEventListener("touchmove", move, { passive: false });
         canvas.addEventListener("touchend", end);
+
+        resizeCanvas();
+        document.addEventListener("fullscreenchange", resizeCanvas);
+        window.addEventListener("resize", resizeCanvas);
+
+        const full = canvas.parentElement.querySelector("[data-full-signature]");
+        if (full) full.addEventListener("click", async () => {
+          const shell = canvas.closest("[data-signature-shell]");
+          if (document.fullscreenElement) {
+            await document.exitFullscreen().catch(() => {});
+            if (screen.orientation?.unlock) screen.orientation.unlock();
+            full.textContent = "Tela cheia";
+            resizeCanvas();
+            return;
+          }
+          await shell.requestFullscreen().catch(() => {});
+          await screen.orientation?.lock?.("landscape").catch(() => {});
+          full.textContent = "Sair da tela cheia";
+          setTimeout(resizeCanvas, 200);
+        });
 
         const clear = canvas.parentElement.querySelector("[data-clear-signature]");
         if (clear) clear.addEventListener("click", () => {
