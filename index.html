@@ -3,6 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17323b">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="UNICO Checklist">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="/manifest.json">
   <title>UNICO Logistica | Checklist Operacional</title>
   <style>
     :root {
@@ -91,6 +97,88 @@
     body.role-app .nav-button:not([data-view="mobile"]),
     body.role-app [data-view-trigger]:not([data-view-trigger="mobile"]) {
       display: none;
+    }
+
+    body.role-app {
+      background: #eef5f6;
+    }
+
+    body.role-app .app-shell {
+      display: block;
+      min-height: 100dvh;
+    }
+
+    body.role-app .sidebar,
+    body.role-app .topbar {
+      display: none;
+    }
+
+    body.role-app .main {
+      max-width: 560px;
+      min-height: 100dvh;
+      margin: 0 auto;
+      padding: 22px 18px 34px;
+    }
+
+    body.role-app #mobile {
+      display: block;
+    }
+
+    body.role-app .route-picker {
+      max-width: none;
+      margin: 0;
+      border: 0;
+      box-shadow: none;
+      background: transparent;
+    }
+
+    body.role-app .route-picker .panel-header {
+      padding: 0 0 16px;
+      border: 0;
+    }
+
+    body.role-app .route-picker .panel-header h2 {
+      font-size: 26px;
+      line-height: 1.2;
+    }
+
+    body.role-app .route-picker .panel-body {
+      padding: 0;
+    }
+
+    body.role-app .route-picker-grid {
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+
+    body.role-app .route-card {
+      min-height: 0;
+      padding: 18px;
+      border-radius: 8px;
+      border-color: #d4e0e3;
+      box-shadow: 0 10px 28px rgba(23, 50, 59, .08);
+    }
+
+    body.role-app .route-card strong {
+      font-size: 18px;
+    }
+
+    body.role-app .route-card small {
+      display: inline-flex;
+      margin-top: 4px;
+      color: #fff;
+      background: var(--brand);
+      min-height: 36px;
+      align-items: center;
+      padding: 0 12px;
+      border-radius: 6px;
+    }
+
+    body.role-app .mobile-preview {
+      max-width: none;
+      border: 0;
+      border-radius: 10px;
+      box-shadow: 0 14px 34px rgba(23, 50, 59, .14);
     }
 
     .sidebar {

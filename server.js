@@ -5,6 +5,10 @@ const path = require("path");
 
 const port = process.env.PORT || 10000;
 const indexPath = path.join(__dirname, "index.html");
+const publicFiles = {
+  "/manifest.json": { path: path.join(__dirname, "manifest.json"), type: "application/manifest+json" },
+  "/icon.svg": { path: path.join(__dirname, "icon.svg"), type: "image/svg+xml" }
+};
 const sessions = new Map();
 
 const users = [
@@ -80,6 +84,12 @@ const server = http.createServer(async (request, response) => {
 
   if (request.method === "GET" && request.url === "/api/session") {
     return sendJson(response, 200, { user: currentSession(request) });
+  }
+
+  if (request.method === "GET" && publicFiles[request.url]) {
+    response.writeHead(200, { "Content-Type": publicFiles[request.url].type });
+    response.end(fs.readFileSync(publicFiles[request.url].path));
+    return;
   }
 
   if (request.method === "GET") {
