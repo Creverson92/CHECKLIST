@@ -39,10 +39,53 @@
       cursor: pointer;
     }
 
+    .login-screen {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: linear-gradient(135deg, #17323b 0%, #0f252d 48%, #eef5f6 48%, #f8fbfc 100%);
+    }
+
+    .login-card {
+      width: min(420px, 100%);
+      background: #fff;
+      border: 1px solid var(--line);
+      box-shadow: 0 24px 70px rgba(23, 50, 59, .24);
+      padding: 28px;
+    }
+
+    .login-card .brand {
+      color: var(--navy);
+      margin-bottom: 24px;
+    }
+
+    .login-card .brand span {
+      color: var(--muted);
+    }
+
+    .login-card h1 {
+      font-size: 24px;
+      margin-bottom: 6px;
+    }
+
+    .login-error {
+      color: var(--red);
+      min-height: 20px;
+      font-size: 13px;
+      font-weight: 650;
+      margin: 10px 0 0;
+    }
+
     .app-shell {
       min-height: 100vh;
       display: grid;
       grid-template-columns: 248px 1fr;
+    }
+
+    .app-shell[hidden],
+    .login-screen[hidden] {
+      display: none;
     }
 
     .sidebar {
@@ -1077,7 +1120,31 @@
   </style>
 </head>
 <body>
-  <div class="app-shell">
+  <section class="login-screen" id="loginScreen">
+    <form class="login-card" id="loginForm">
+      <div class="brand">
+        <div class="brand-mark">U</div>
+        <div>
+          <strong>UNICO</strong>
+          <span>Checklist Logistica</span>
+        </div>
+      </div>
+      <h1>Acessar sistema</h1>
+      <p class="lead">Informe seu usuario e senha para continuar.</p>
+      <div class="field">
+        <label for="loginUser">Usuario</label>
+        <input id="loginUser" autocomplete="username" placeholder="Digite seu usuario">
+      </div>
+      <div class="field">
+        <label for="loginPassword">Senha</label>
+        <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Digite sua senha">
+      </div>
+      <button class="btn primary" type="submit" style="width:100%;">Entrar</button>
+      <div class="login-error" id="loginError"></div>
+    </form>
+  </section>
+
+  <div class="app-shell" id="appShell" hidden>
     <aside class="sidebar">
       <div class="brand">
         <div class="brand-mark">U</div>
@@ -1098,8 +1165,10 @@
       <header class="topbar">
         <div class="crumb"><strong>UNICO Logistica LTDA</strong> / Pouso Alegre / Controle operacional</div>
         <div class="top-actions">
+          <span class="pill" id="userBadge">Usuario</span>
           <button class="btn" data-view-trigger="locations">Administrar locais</button>
           <button class="btn primary" data-view-trigger="builder">Novo roteiro</button>
+          <button class="btn" id="logoutButton">Sair</button>
         </div>
       </header>
 
@@ -1432,6 +1501,7 @@
     let scannerStream = null;
     let scannerTimer = null;
     let scannerTargetItemId = null;
+    let currentUser = null;
 
     const views = document.querySelectorAll(".view");
     const navButtons = document.querySelectorAll(".nav-button");
@@ -1448,6 +1518,7 @@
     }
 
     function setView(id) {
+      if (currentUser?.role === "app" && id !== "mobile") id = "mobile";
       if (id === "mobile") {
         selectedRouteId = null;
         selectedLocationId = null;
@@ -1458,6 +1529,53 @@
       renderLocationPicker();
       renderMobileItems();
       window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function applyAccessControl() {
+      const isAdmin = currentUser?.role === "admin";
+      document.querySelectorAll(".nav-button").forEach(button => {
+        const allowed = isAdmin || button.dataset.view === "mobile";
+        button.hidden = !allowed;
+      });
+      document.querySelectorAll("[data-view-trigger]").forEach(button => {
+        const target = button.dataset.viewTrigger;
+        button.hidden = !isAdmin && target !== "mobile";
+      });
+      byId("userBadge").textContent = `${currentUser.name} - ${isAdmin ? "Administrador" : "Aplicativo"}`;
+      setView(isAdmin ? "dashboard" : "mobile");
+    }
+
+    async function login(username, password) {
+      const response = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        byId("loginError").textContent = result.error || "Usuario ou senha invalidos.";
+        return;
+      }
+      currentUser = result.user;
+      byId("loginError").textContent = "";
+      byId("loginScreen").hidden = true;
+      byId("appShell").hidden = false;
+      applyAccessControl();
+      renderAll();
+    }
+
+    async function logout() {
+      await fetch("/api/logout", { method: "POST" }).catch(() => {});
+      currentUser = null;
+      selectedRouteId = null;
+      selectedLocationId = null;
+      mobileStepIndex = 0;
+      mobileAnswers = {};
+      byId("loginForm").reset();
+      byId("appShell").hidden = true;
+      byId("loginScreen").hidden = false;
+      byId("loginUser").focus();
     }
 
     function selectedRouteLocations() {
@@ -2255,6 +2373,7 @@
     }
 
     function renderAll() {
+      if (!currentUser) return;
       renderLocations();
       renderDashboard();
       renderRouteSummary();
@@ -2263,6 +2382,11 @@
       renderMobileItems();
     }
 
+    byId("loginForm").addEventListener("submit", event => {
+      event.preventDefault();
+      login(byId("loginUser").value, byId("loginPassword").value);
+    });
+    byId("logoutButton").addEventListener("click", logout);
     navButtons.forEach(button => button.addEventListener("click", () => setView(button.dataset.view)));
     triggers.forEach(button => button.addEventListener("click", () => setView(button.dataset.viewTrigger)));
     byId("openTypeModal").addEventListener("click", () => modal.classList.add("open"));

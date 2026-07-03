@@ -1,10 +1,15 @@
 services:
   - type: web
     name: unico-checklist
-    runtime: static
-    buildCommand: echo "Static site ready"
-    staticPublishPath: .
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
+    runtime: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: ADMIN_USER
+        value: Creverson
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: APP_USER
+        value: Anderson
+      - key: APP_PASSWORD
+        sync: false
