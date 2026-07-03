@@ -68,9 +68,10 @@ const server = http.createServer(async (request, response) => {
     if (!user) return sendJson(response, 401, { error: "Usuario ou senha invalidos." });
 
     const token = crypto.randomBytes(32).toString("hex");
+    const maxAge = payload.remember ? 60 * 60 * 24 * 30 : 60 * 60 * 8;
     sessions.set(token, safeUser(user));
     return sendJson(response, 200, { user: safeUser(user) }, {
-      "Set-Cookie": `session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=28800`
+      "Set-Cookie": `session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}`
     });
   }
 

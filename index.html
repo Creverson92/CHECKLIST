@@ -1236,6 +1236,7 @@
         <label for="loginPassword">Senha</label>
         <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Digite sua senha">
       </div>
+      <label class="toggle" style="margin-bottom:14px;"><input type="checkbox" id="rememberLogin"> Manter-me conectado</label>
       <button class="btn primary" type="submit" style="width:100%;">Entrar</button>
       <div class="login-error" id="loginError"></div>
     </form>
@@ -1648,11 +1649,11 @@
       setView(isAdmin ? "dashboard" : "mobile");
     }
 
-    async function login(username, password) {
+    async function login(username, password, remember) {
       const response = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ username, password, remember })
       });
       const result = await response.json().catch(() => ({}));
 
@@ -2505,7 +2506,7 @@
 
     byId("loginForm").addEventListener("submit", event => {
       event.preventDefault();
-      login(byId("loginUser").value, byId("loginPassword").value);
+      login(byId("loginUser").value, byId("loginPassword").value, byId("rememberLogin").checked);
     });
     byId("logoutButton").addEventListener("click", logout);
     navButtons.forEach(button => button.addEventListener("click", () => setView(button.dataset.view)));
