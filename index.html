@@ -778,23 +778,7 @@
             <div class="stat"><span>Status</span><strong>98%</strong><small>Pronto para piloto</small></div>
           </div>
 
-          <div class="grid two" style="margin-top: 18px;">
-            <section class="panel">
-              <div class="panel-header">
-                <h2>Roteiro principal</h2>
-                <button class="btn small primary" data-view-trigger="builder">Editar roteiro</button>
-              </div>
-              <div class="panel-body">
-                <div class="steps">
-                  <div class="step active"><b>1</b>Informacoes iniciais</div>
-                  <div class="step active"><b>2</b>Criacao do roteiro</div>
-                  <div class="step"><b>3</b>Parametros</div>
-                  <div class="step"><b>4</b>Visualizacao</div>
-                </div>
-                <div id="dashboardItems" class="item-list"></div>
-              </div>
-            </section>
-
+          <div style="margin-top: 18px;">
             <section class="panel">
               <div class="panel-header">
                 <h2>Execucao em campo</h2>
@@ -1160,6 +1144,7 @@
 
     function renderBuilderItems(targetId, compact = false) {
       const target = byId(targetId);
+      if (!target) return;
       target.innerHTML = "";
 
       if (!items.length) {
@@ -1407,7 +1392,6 @@
       renderLocations();
       renderTypeGrid();
       renderBuilderItems("builderItems");
-      renderBuilderItems("dashboardItems", true);
       renderMobileItems();
       byId("statRoutes").textContent = "1";
     }
