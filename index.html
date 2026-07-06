@@ -702,14 +702,17 @@
     }
 
     .check-item-heading {
+      display: grid;
+      gap: 4px;
       min-width: 0;
+      flex: 1;
     }
 
     .check-item-heading strong {
       display: block;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+      white-space: normal;
     }
 
     .check-item-summary {
@@ -717,10 +720,11 @@
       color: var(--muted);
       font-size: 12px;
       font-weight: 400;
-      margin-top: 4px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      line-height: 1.45;
+      margin-top: 0;
+      max-width: 90ch;
+      overflow-wrap: anywhere;
+      white-space: normal;
     }
 
     .item-type {
