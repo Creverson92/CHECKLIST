@@ -1028,6 +1028,12 @@
       font-size: 12px;
     }
 
+    .media-list small {
+      display: block;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
     .scanner-panel {
       display: grid;
       gap: 12px;
@@ -1304,18 +1310,37 @@
 
     .report-photos {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 10px;
-      margin-top: 10px;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 14px;
+      margin-top: 12px;
     }
 
-    .report-photos img {
-      width: 100%;
-      height: 150px;
-      object-fit: contain;
+    .report-photo-figure {
+      margin: 0;
+      padding: 8px;
       border: 1px solid #aebbc0;
       border-radius: 4px;
-      background: #f4f5f6;
+      background: #fff;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+
+    .report-photo-figure img {
+      display: block;
+      width: auto;
+      max-width: 100%;
+      height: auto;
+      max-height: 560px;
+      object-fit: contain;
+      margin: 0 auto;
+      image-rendering: auto;
+    }
+
+    .report-photo-figure figcaption {
+      color: #60747a;
+      font-size: 11px;
+      margin-top: 6px;
+      text-align: center;
     }
 
     .report-signature {
@@ -2568,23 +2593,24 @@
             <div class="media-count">Fotos registradas: ${photos.length} de ${maxPhotos}. Minimo obrigatorio: ${minPhotos}.</div>
             <label class="photo-drop"><input data-camera-photo type="file" accept="image/*" capture="environment" style="display:none"> Tirar foto ${Math.min(photos.length + 1, maxPhotos)} de ${maxPhotos}</label>
             <label class="photo-drop"><input data-gallery-photo type="file" accept="image/*" style="display:none"> Adicionar da galeria</label>
-            <ul class="media-list">${photos.map((photo, photoIndex) => `<li>Foto ${photoIndex + 1}: ${photo.name}</li>`).join("")}</ul>
+            <ul class="media-list">${photos.map((photo, photoIndex) => `<li>Foto ${photoIndex + 1}: ${escapeHtml(photo.name || "Imagem")}<small>${photoMeta(photo)}</small></li>`).join("")}</ul>
           </div>
         `;
         body.querySelectorAll("input[type=file]").forEach(fileInput => {
           fileInput.disabled = photos.length >= maxPhotos;
-          fileInput.addEventListener("change", event => {
+          fileInput.addEventListener("change", async event => {
             const file = event.target.files[0];
             if (!file) return;
             const current = [...(mobileAnswers[item.id]?.photos || [])];
             if (current.length >= maxPhotos) return;
-            const reader = new FileReader();
-            reader.onload = () => {
-              current.push({ name: file.name || `Foto ${current.length + 1}`, url: reader.result });
+            try {
+              const photo = await readPhotoFile(file, `Foto ${current.length + 1}`);
+              current.push(photo);
               mobileAnswers[item.id] = { ...mobileAnswers[item.id], value: current.length, photos: current };
               renderMobileItems();
-            };
-            reader.readAsDataURL(file);
+            } finally {
+              event.target.value = "";
+            }
           });
         });
       } else if (item.type === "number") {
@@ -2658,6 +2684,36 @@
       if (Array.isArray(answer.value)) return answer.value.length > 0;
       if (typeof answer.value === "number") return answer.value > 0;
       return String(answer.value).trim().length > 0;
+    }
+
+    function readPhotoFile(file, fallbackName) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(reader.error);
+        reader.onload = () => {
+          const photo = {
+            name: file.name || fallbackName,
+            url: reader.result,
+            type: file.type || "image/*",
+            size: file.size || 0
+          };
+          const image = new Image();
+          image.onload = () => {
+            photo.width = image.naturalWidth;
+            photo.height = image.naturalHeight;
+            resolve(photo);
+          };
+          image.onerror = () => resolve(photo);
+          image.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function photoMeta(photo) {
+      const resolution = photo.width && photo.height ? `${photo.width} x ${photo.height}px` : "resolucao original";
+      const size = photo.size ? `${(photo.size / 1024 / 1024).toFixed(1)} MB` : "tamanho original";
+      return `${resolution} - ${size}`;
     }
 
     function setupSignaturePads() {
@@ -2865,7 +2921,12 @@
       const generatedAt = new Date().toLocaleDateString("pt-BR");
       const rows = reportItems.map((item, index) => {
         const answer = answers[item.id] || {};
-        const photos = (answer.photos || []).map(photo => `<img src="${photo.url}" alt="${escapeHtml(photo.name)}">`).join("");
+        const photos = (answer.photos || []).map((photo, photoIndex) => `
+          <figure class="report-photo-figure">
+            <img src="${photo.url}" alt="${escapeHtml(photo.name || `Foto ${photoIndex + 1}`)}">
+            <figcaption>Foto ${photoIndex + 1} - ${escapeHtml(photo.name || "Imagem")} - ${escapeHtml(photoMeta(photo))}</figcaption>
+          </figure>
+        `).join("");
         const signature = answer.signatureUrl ? `<img class="report-signature" src="${answer.signatureUrl}" alt="Assinatura">` : "";
         return `
           <section class="report-item">
@@ -2949,15 +3010,28 @@
           .report-item h3{color:#45575d;font-size:13px;margin:0 0 8px;text-transform:uppercase;}
           .report-answer{margin:0 0 8px;color:#45575d;}
           .report-observation{margin:0 0 8px;color:#45575d;font-size:11px;}
-          .report-photos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:8px;}
-          .report-photos img{width:100%;height:118px;object-fit:contain;border:1px solid #aebbc0;border-radius:4px;background:#f4f5f6;}
+          .report-photos{display:block;margin-top:10px;}
+          .report-photo-figure{margin:10px 0 16px;padding:7px;border:1px solid #aebbc0;border-radius:4px;background:#fff;break-inside:avoid;page-break-inside:avoid;}
+          .report-photo-figure img{display:block;width:auto;max-width:100%;height:auto;max-height:246mm;object-fit:contain;margin:0 auto;image-rendering:auto;}
+          .report-photo-figure figcaption{color:#60747a;font-size:10px;margin-top:5px;text-align:center;}
+          .report-photo-figure + .report-photo-figure{break-before:page;page-break-before:always;}
+          .report-item:has(.report-photo-figure){display:block;}
+          .report-item:has(.report-photo-figure)>.report-icon{display:none;}
           .report-signature{width:300px;max-width:100%;max-height:150px;object-fit:contain;margin-top:6px;display:block;}
           .report-footer{color:#8a999e;border-top:1px solid #cfdadd;padding:8px 22px;font-size:10px;}
         </style></head><body>${reportHtml(report)}</body></html>
       `);
       win.document.close();
       win.focus();
-      setTimeout(() => win.print(), 500);
+      const images = [...win.document.images];
+      const loaded = images.map(image => {
+        if (image.complete) return Promise.resolve();
+        return new Promise(resolve => {
+          image.onload = resolve;
+          image.onerror = resolve;
+        });
+      });
+      Promise.all(loaded).then(() => setTimeout(() => win.print(), 300));
     }
 
     function renderAll() {
