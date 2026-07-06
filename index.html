@@ -2111,6 +2111,26 @@
       return wrap;
     }
 
+    function normalizeCaptureMode(mode) {
+      const value = String(mode || "").toLowerCase();
+      if (value.includes("galeria") && !value.includes("camera")) return "gallery";
+      if (value.includes("foto da galeria")) return "both";
+      if (value.includes("camera") && value.includes("galeria")) return "both";
+      if (value === "gallery") return "gallery";
+      if (value === "both") return "both";
+      return "camera";
+    }
+
+    function captureModeSelect(value, attribute = "data-capture-mode") {
+      return `
+        <select ${attribute}>
+          <option value="camera">Tirar foto</option>
+          <option value="gallery">Imagem da galeria</option>
+          <option value="both">Tirar foto ou galeria</option>
+        </select>
+      `;
+    }
+
     function renderLocations() {
       const statLocations = byId("statLocations");
       if (statLocations) statLocations.textContent = locations.length;
@@ -2318,12 +2338,13 @@
         type,
         title: `Novo item - ${typeLabel(type)}`,
         support: "",
-        min: type === "media" || type === "number" ? 1 : "",
-        max: type === "media" || type === "number" ? 30 : "",
+        min: type === "media" ? 1 : "",
+        max: type === "media" ? 30 : "",
         observations: true,
         evidence: type !== "signature",
         required: false,
-        mediaMode: "Camera",
+        mediaMode: "camera",
+        evidenceMode: "both",
         options: defaults[type] || []
       });
       expandedItemId = items[items.length - 1].id;
@@ -2425,7 +2446,11 @@
           checks.append(
             checkbox(" Permitir observacoes", item.observations, value => item.observations = value),
             checkbox(" Rastreio obrigatorio", item.tracking, value => item.tracking = value),
-            checkbox(" Permitir evidencias", item.evidence, value => item.evidence = value)
+            checkbox(" Permitir evidencias", item.evidence, value => {
+              item.evidence = value;
+              if (value) item.evidenceMode = normalizeCaptureMode(item.evidenceMode || "both");
+              renderAll();
+            })
           );
 
           body.append(titleField, supportField, checks);
@@ -2438,25 +2463,22 @@
             const row = document.createElement("div");
             row.className = "form-row";
             row.innerHTML = `
-              <div class="field"><label>Tipo de midia</label><select data-media><option>Camera</option><option>Camera e foto da galeria</option></select></div>
+              <div class="field"><label>Tipo de midia</label>${captureModeSelect(item.mediaMode || "camera", "data-media")}</div>
               <div class="form-row" style="margin:0;"><div class="field"><label>Minimo</label><input data-min type="number" value="${item.min || 1}"></div><div class="field"><label>Maximo</label><input data-max type="number" value="${item.max || 30}"></div></div>
             `;
-            row.querySelector("[data-media]").value = item.mediaMode || "Camera";
+            row.querySelector("[data-media]").value = normalizeCaptureMode(item.mediaMode || "camera");
             row.querySelector("[data-media]").addEventListener("change", event => item.mediaMode = event.target.value);
             row.querySelector("[data-min]").addEventListener("input", event => item.min = event.target.value);
             row.querySelector("[data-max]").addEventListener("input", event => item.max = event.target.value);
             body.append(row);
           }
 
-          if (item.type === "number") {
+          if (item.evidence && item.type !== "media") {
             const row = document.createElement("div");
             row.className = "form-row";
-            row.innerHTML = `
-              <div class="field"><label>Minimo</label><input type="number" data-min value="${item.min || ""}"></div>
-              <div class="field"><label>Maximo</label><input type="number" data-max value="${item.max || ""}"></div>
-            `;
-            row.querySelector("[data-min]").addEventListener("input", event => item.min = event.target.value);
-            row.querySelector("[data-max]").addEventListener("input", event => item.max = event.target.value);
+            row.innerHTML = `<div class="field"><label>Tipo de evidencia</label>${captureModeSelect(item.evidenceMode || "both", "data-evidence-mode")}</div>`;
+            row.querySelector("[data-evidence-mode]").value = normalizeCaptureMode(item.evidenceMode || "both");
+            row.querySelector("[data-evidence-mode]").addEventListener("change", event => item.evidenceMode = event.target.value);
             body.append(row);
           }
 
@@ -2516,6 +2538,60 @@
       });
       table.append(tbody);
       wrap.append(table);
+      return wrap;
+    }
+
+    function photoControls(item, settings = {}) {
+      const {
+        answerKey = "photos",
+        countAsValue = false,
+        max = 30,
+        min = 0,
+        mode = "both",
+        title = "Evidencia"
+      } = settings;
+      const answer = mobileAnswers[item.id] || {};
+      const photos = answer[answerKey] || [];
+      const captureMode = normalizeCaptureMode(mode);
+      const wrap = document.createElement("div");
+      wrap.className = "media-tools";
+      const countText = min > 0
+        ? `Fotos registradas: ${photos.length} de ${max}. Minimo obrigatorio: ${min}.`
+        : `${title}s registradas: ${photos.length} de ${max}.`;
+      const cameraButton = captureMode === "camera" || captureMode === "both"
+        ? `<label class="photo-drop"><input data-photo-input type="file" accept="image/*" capture="environment" style="display:none"> Tirar foto ${Math.min(photos.length + 1, max)} de ${max}</label>`
+        : "";
+      const galleryButton = captureMode === "gallery" || captureMode === "both"
+        ? `<label class="photo-drop"><input data-photo-input type="file" accept="image/*" style="display:none"> Adicionar imagem da galeria</label>`
+        : "";
+
+      wrap.innerHTML = `
+        <div class="media-count">${countText}</div>
+        ${cameraButton}
+        ${galleryButton}
+        <ul class="media-list">${photos.map((photo, photoIndex) => `<li>${title} ${photoIndex + 1}: ${escapeHtml(photo.name || "Imagem")}<small>${photoMeta(photo)}</small></li>`).join("")}</ul>
+      `;
+      wrap.querySelectorAll("[data-photo-input]").forEach(fileInput => {
+        fileInput.disabled = photos.length >= max;
+        fileInput.addEventListener("change", async event => {
+          const file = event.target.files[0];
+          if (!file) return;
+          const current = [...(mobileAnswers[item.id]?.[answerKey] || [])];
+          if (current.length >= max) return;
+          try {
+            const photo = await readPhotoFile(file, `${title} ${current.length + 1}`);
+            current.push(photo);
+            mobileAnswers[item.id] = {
+              ...mobileAnswers[item.id],
+              ...(countAsValue ? { value: current.length } : {}),
+              [answerKey]: current
+            };
+            renderMobileItems();
+          } finally {
+            event.target.value = "";
+          }
+        });
+      });
       return wrap;
     }
 
@@ -2591,35 +2667,20 @@
       } else if (item.type === "media") {
         const minPhotos = Number(item.min || 1);
         const maxPhotos = Number(item.max || 30);
-        const photos = answer.photos || [];
-        body.innerHTML = `
-          <div class="media-tools">
-            <div class="media-count">Fotos registradas: ${photos.length} de ${maxPhotos}. Minimo obrigatorio: ${minPhotos}.</div>
-            <label class="photo-drop"><input data-camera-photo type="file" accept="image/*" capture="environment" style="display:none"> Tirar foto ${Math.min(photos.length + 1, maxPhotos)} de ${maxPhotos}</label>
-            <label class="photo-drop"><input data-gallery-photo type="file" accept="image/*" style="display:none"> Adicionar da galeria</label>
-            <ul class="media-list">${photos.map((photo, photoIndex) => `<li>Foto ${photoIndex + 1}: ${escapeHtml(photo.name || "Imagem")}<small>${photoMeta(photo)}</small></li>`).join("")}</ul>
-          </div>
-        `;
-        body.querySelectorAll("input[type=file]").forEach(fileInput => {
-          fileInput.disabled = photos.length >= maxPhotos;
-          fileInput.addEventListener("change", async event => {
-            const file = event.target.files[0];
-            if (!file) return;
-            const current = [...(mobileAnswers[item.id]?.photos || [])];
-            if (current.length >= maxPhotos) return;
-            try {
-              const photo = await readPhotoFile(file, `Foto ${current.length + 1}`);
-              current.push(photo);
-              mobileAnswers[item.id] = { ...mobileAnswers[item.id], value: current.length, photos: current };
-              renderMobileItems();
-            } finally {
-              event.target.value = "";
-            }
-          });
-        });
+        body.append(photoControls(item, {
+          answerKey: "photos",
+          countAsValue: true,
+          min: minPhotos,
+          max: maxPhotos,
+          mode: item.mediaMode || "camera",
+          title: "Foto"
+        }));
       } else if (item.type === "number") {
-        body.innerHTML = `<input type="number" placeholder="Digite o numero da nota fiscal" value="${answer.value || ""}">`;
-        body.querySelector("input").addEventListener("input", event => mobileAnswers[item.id] = { ...mobileAnswers[item.id], value: event.target.value });
+        body.innerHTML = `<input type="text" inputmode="numeric" pattern="[0-9]*" placeholder="Digite apenas numeros" value="${answer.value || ""}">`;
+        body.querySelector("input").addEventListener("input", event => {
+          event.target.value = event.target.value.replace(/\D/g, "");
+          mobileAnswers[item.id] = { ...mobileAnswers[item.id], value: event.target.value };
+        });
       } else if (item.type === "text") {
         body.innerHTML = `<input type="text" placeholder="Digite o nome completo" value="${answer.value || ""}">`;
         body.querySelector("input").addEventListener("input", event => mobileAnswers[item.id] = { ...mobileAnswers[item.id], value: event.target.value });
@@ -2649,6 +2710,17 @@
         obs.value = answer.observation || "";
         obs.addEventListener("input", event => mobileAnswers[item.id] = { ...mobileAnswers[item.id], observation: event.target.value });
         body.append(obs);
+      }
+
+      if (item.evidence && item.type !== "media") {
+        const evidence = photoControls(item, {
+          answerKey: "evidencePhotos",
+          max: 30,
+          mode: item.evidenceMode || "both",
+          title: "Evidencia"
+        });
+        evidence.style.marginTop = "10px";
+        body.append(evidence);
       }
 
       const warning = document.createElement("div");
@@ -2948,6 +3020,12 @@
             <figcaption>Foto ${photoIndex + 1} - ${escapeHtml(photo.name || "Imagem")} - ${escapeHtml(photoMeta(photo))}</figcaption>
           </figure>
         `).join("");
+        const evidencePhotos = (answer.evidencePhotos || []).map((photo, photoIndex) => `
+          <figure class="report-photo-figure">
+            <img src="${photo.url}" alt="${escapeHtml(photo.name || `Evidencia ${photoIndex + 1}`)}">
+            <figcaption>Evidencia ${photoIndex + 1} - ${escapeHtml(photo.name || "Imagem")} - ${escapeHtml(photoMeta(photo))}</figcaption>
+          </figure>
+        `).join("");
         const signature = answer.signatureUrl ? `<img class="report-signature" src="${answer.signatureUrl}" alt="Assinatura">` : "";
         return `
           <section class="report-item">
@@ -2957,6 +3035,7 @@
               <p class="report-answer">${escapeHtml(formatAnswerValue(answer))}</p>
               ${answer.observation ? `<p class="report-observation"><strong>Observacoes:</strong> ${escapeHtml(answer.observation)}</p>` : ""}
               ${photos ? `<div class="report-photos">${photos}</div>` : ""}
+              ${evidencePhotos ? `<div class="report-photos">${evidencePhotos}</div>` : ""}
               ${signature}
             </div>
           </section>
