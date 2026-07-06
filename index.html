@@ -1804,6 +1804,19 @@
       }
     ];
 
+    function readStorageArray(key) {
+      try {
+        const value = JSON.parse(localStorage.getItem(key) || "[]");
+        return Array.isArray(value) ? value : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function savePublishedChecklists() {
+      localStorage.setItem("publishedChecklists", JSON.stringify(publishedChecklists));
+    }
+
     let items = JSON.parse(JSON.stringify(initialItems));
     let expandedItemId = null;
     let routeSummaryOpen = false;
@@ -1811,9 +1824,9 @@
     let selectedLocationId = null;
     let mobileStepIndex = 0;
     let mobileAnswers = {};
-    let publishedChecklists = [];
-    let deletedHistoryIds = JSON.parse(localStorage.getItem("deletedHistoryIds") || "[]");
-    let savedRoutes = JSON.parse(localStorage.getItem("savedRoutes") || "[]");
+    let publishedChecklists = readStorageArray("publishedChecklists");
+    let deletedHistoryIds = readStorageArray("deletedHistoryIds");
+    let savedRoutes = readStorageArray("savedRoutes");
     let editingRouteId = null;
     let scannerStream = null;
     let scannerTimer = null;
@@ -2751,11 +2764,12 @@
         object: "Checklist publicado",
         created: now.toLocaleDateString("pt-BR") + " - " + now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
         finished: now.toLocaleDateString("pt-BR") + " - " + now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
-        executor: "Unico Group",
+        executor: currentUser?.name || currentUser?.username || "Unico Group",
         status: "Execucao finalizada",
         answers: JSON.parse(JSON.stringify(mobileAnswers)),
         items: JSON.parse(JSON.stringify(routeItems))
       });
+      savePublishedChecklists();
       byId("publishModal").classList.remove("open");
       mobileStepIndex = routeItems.length;
       renderDashboard();
@@ -2773,7 +2787,11 @@
       const confirmed = window.confirm(`Tem certeza que deseja excluir o checklist ${report.id}? Esta acao nao pode ser desfeita.`);
       if (!confirmed) return;
 
+      const publishedCount = publishedChecklists.length;
       publishedChecklists = publishedChecklists.filter(item => item.id !== id);
+      if (publishedChecklists.length !== publishedCount) {
+        savePublishedChecklists();
+      }
       const historyIndex = historyItems.findIndex(item => item.id === id);
       if (historyIndex >= 0 && !deletedHistoryIds.includes(id)) {
         deletedHistoryIds.push(id);
