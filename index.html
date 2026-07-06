@@ -1132,6 +1132,192 @@
       border: 1px solid var(--line);
     }
 
+    .report-modal {
+      width: min(1040px, 100%);
+      max-height: calc(100vh - 36px);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .report-modal .panel-body {
+      overflow: auto;
+      background: #f6fafb;
+      padding: 18px;
+    }
+
+    .checklist-report {
+      background: #fff;
+      color: #45575d;
+      border: 1px solid #cfdadd;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .report-cover {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 24px 28px;
+      border-bottom: 2px solid #cbd5d9;
+    }
+
+    .report-brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .report-brand-mark {
+      width: 54px;
+      height: 54px;
+      display: grid;
+      place-items: center;
+      background: var(--brand);
+      color: #fff;
+      font-weight: 800;
+      border: 2px solid #dbe7ea;
+    }
+
+    .report-brand strong,
+    .report-checklist-id strong {
+      display: block;
+      color: #33474d;
+      font-size: 22px;
+      letter-spacing: .02em;
+    }
+
+    .report-brand span,
+    .report-checklist-id span {
+      display: block;
+      color: #7a8b91;
+      margin-top: 4px;
+      font-size: 12px;
+    }
+
+    .report-checklist-id {
+      text-align: right;
+    }
+
+    .report-section-title {
+      padding: 14px 28px;
+      color: #45575d;
+      font-size: 16px;
+      font-weight: 800;
+      text-transform: uppercase;
+      border-bottom: 1px solid #cfdadd;
+      background: #fbfcfd;
+    }
+
+    .report-meta-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px 72px;
+      padding: 24px 28px 28px;
+    }
+
+    .report-meta-item {
+      display: grid;
+      grid-template-columns: 26px 1fr;
+      gap: 10px;
+      align-items: start;
+    }
+
+    .report-icon {
+      color: #45575d;
+      font-size: 18px;
+      line-height: 1.1;
+    }
+
+    .report-meta-item strong {
+      display: block;
+      color: #45575d;
+      font-size: 14px;
+    }
+
+    .report-meta-item span {
+      color: #45575d;
+    }
+
+    .report-items {
+      margin: 0 28px 24px;
+      padding: 18px 24px 8px;
+      border: 1px solid #cfdadd;
+      border-radius: 4px;
+    }
+
+    .report-items h2 {
+      color: #45575d;
+      font-size: 16px;
+      margin: 0 0 16px;
+      text-transform: uppercase;
+      border-bottom: 1px solid #b8c5ca;
+      padding-bottom: 12px;
+    }
+
+    .report-item {
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      gap: 12px;
+      border-bottom: 1px solid #e5ecef;
+      padding: 16px 0;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+
+    .report-item:last-child {
+      border-bottom: 0;
+    }
+
+    .report-item h3 {
+      color: #45575d;
+      font-size: 15px;
+      margin: 0 0 10px;
+      text-transform: uppercase;
+    }
+
+    .report-answer {
+      margin: 0 0 10px;
+      color: #45575d;
+    }
+
+    .report-observation {
+      margin: 0 0 10px;
+      color: #45575d;
+      font-size: 13px;
+    }
+
+    .report-photos {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .report-photos img {
+      width: 100%;
+      height: 150px;
+      object-fit: contain;
+      border: 1px solid #aebbc0;
+      border-radius: 4px;
+      background: #f4f5f6;
+    }
+
+    .report-signature {
+      width: min(360px, 100%);
+      height: auto;
+      max-height: 170px;
+      object-fit: contain;
+      margin-top: 8px;
+      display: block;
+    }
+
+    .report-footer {
+      color: #8a999e;
+      border-top: 1px solid #cfdadd;
+      padding: 10px 28px;
+      font-size: 12px;
+    }
+
     .empty-state {
       border: 1px dashed var(--line);
       padding: 22px;
@@ -1474,7 +1660,7 @@
   </div>
 
   <div class="modal-backdrop" id="reportModal" role="dialog" aria-modal="true" aria-labelledby="reportModalTitle">
-    <div class="modal">
+    <div class="modal report-modal">
       <div class="panel-header">
         <h2 id="reportModalTitle">Checklist realizado</h2>
         <button class="icon-btn" id="closeReportModal" aria-label="Fechar">X</button>
@@ -2253,11 +2439,14 @@
             const file = event.target.files[0];
             if (!file) return;
             const current = [...(mobileAnswers[item.id]?.photos || [])];
-            if (current.length < maxPhotos) {
-              current.push({ name: file.name || `Foto ${current.length + 1}`, url: URL.createObjectURL(file) });
-            }
-            mobileAnswers[item.id] = { ...mobileAnswers[item.id], value: current.length, photos: current };
-            renderMobileItems();
+            if (current.length >= maxPhotos) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+              current.push({ name: file.name || `Foto ${current.length + 1}`, url: reader.result });
+              mobileAnswers[item.id] = { ...mobileAnswers[item.id], value: current.length, photos: current };
+              renderMobileItems();
+            };
+            reader.readAsDataURL(file);
           });
         });
       } else if (item.type === "number") {
@@ -2379,6 +2568,13 @@
         }
 
         function end() {
+          if (drawing && canvas.dataset.signatureId) {
+            mobileAnswers[canvas.dataset.signatureId] = {
+              ...mobileAnswers[canvas.dataset.signatureId],
+              value: true,
+              signatureUrl: canvas.toDataURL("image/png")
+            };
+          }
           drawing = false;
         }
 
@@ -2412,7 +2608,7 @@
         const clear = canvas.parentElement.querySelector("[data-clear-signature]");
         if (clear) clear.addEventListener("click", () => {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
-          if (canvas.dataset.signatureId) mobileAnswers[canvas.dataset.signatureId] = { ...mobileAnswers[canvas.dataset.signatureId], value: false };
+          if (canvas.dataset.signatureId) mobileAnswers[canvas.dataset.signatureId] = { ...mobileAnswers[canvas.dataset.signatureId], value: false, signatureUrl: "" };
         });
       });
     }
@@ -2498,16 +2694,76 @@
       renderDashboard();
     }
 
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, char => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;"
+      }[char]));
+    }
+
+    function formatAnswerValue(answer) {
+      const value = answer?.value;
+      if (Array.isArray(value)) return value.length ? value.join(", ") : "Nao informado";
+      if (value === true) return "Assinado";
+      if (value === false || value === undefined || value === null || value === "") return "Nao informado";
+      return String(value);
+    }
+
     function reportHtml(report) {
       const reportItems = report.items || items;
       const answers = report.answers || {};
+      const generatedAt = new Date().toLocaleDateString("pt-BR");
       const rows = reportItems.map((item, index) => {
         const answer = answers[item.id] || {};
-        const value = Array.isArray(answer.value) ? answer.value.join(", ") : (answer.value || "Registro demonstrativo");
-        const photos = (answer.photos || []).map(photo => `<img src="${photo.url}" alt="${photo.name}">`).join("");
-        return `<section><h3>${index + 1}. ${item.title}</h3><p><strong>Resposta:</strong> ${value}</p>${answer.observation ? `<p><strong>Observacoes:</strong> ${answer.observation}</p>` : ""}<div class="pdf-photos">${photos}</div></section>`;
+        const photos = (answer.photos || []).map(photo => `<img src="${photo.url}" alt="${escapeHtml(photo.name)}">`).join("");
+        const signature = answer.signatureUrl ? `<img class="report-signature" src="${answer.signatureUrl}" alt="Assinatura">` : "";
+        return `
+          <section class="report-item">
+            <div class="report-icon">▣</div>
+            <div>
+              <h3>${index + 1} - ${escapeHtml(item.title)}</h3>
+              <p class="report-answer">${escapeHtml(formatAnswerValue(answer))}</p>
+              ${answer.observation ? `<p class="report-observation"><strong>Observacoes:</strong> ${escapeHtml(answer.observation)}</p>` : ""}
+              ${photos ? `<div class="report-photos">${photos}</div>` : ""}
+              ${signature}
+            </div>
+          </section>
+        `;
       }).join("");
-      return `<div class="pdf-report"><h1>${report.route}</h1><p><strong>Checklist:</strong> ${report.id}</p><p><strong>Filial:</strong> ${report.branch}</p><p><strong>Executor:</strong> ${report.executor}</p><p><strong>Finalizado em:</strong> ${report.finished}</p>${rows}</div>`;
+      return `
+        <article class="checklist-report">
+          <header class="report-cover">
+            <div class="report-brand">
+              <div class="report-brand-mark">U</div>
+              <div><strong>UNICO</strong><span>Checklist Logistica</span></div>
+            </div>
+            <div class="report-checklist-id">
+              <span>Checklist</span>
+              <strong>${escapeHtml(report.id)}</strong>
+            </div>
+          </header>
+
+          <div class="report-section-title">Dados do checklist</div>
+          <section class="report-meta-grid">
+            <div class="report-meta-item"><div class="report-icon">▦</div><div><strong>Unidade</strong><span>UNICO Logistica LTDA</span></div></div>
+            <div class="report-meta-item"><div class="report-icon">◷</div><div><strong>Data/hora inicio</strong><span>${escapeHtml(report.created || "Nao informado")}</span></div></div>
+            <div class="report-meta-item"><div class="report-icon">☑</div><div><strong>Data/hora finalizacao</strong><span>${escapeHtml(report.finished || "Nao informado")}</span></div></div>
+            <div class="report-meta-item"><div class="report-icon">⌖</div><div><strong>Localidade</strong><span>${escapeHtml(report.branch || "Nao informado")}</span></div></div>
+            <div class="report-meta-item"><div class="report-icon">◉</div><div><strong>Executor</strong><span>${escapeHtml(report.executor || "Nao informado")}</span></div></div>
+            <div class="report-meta-item"><div class="report-icon">□</div><div><strong>Objeto</strong><span>${escapeHtml(report.object || "Nao informado")}</span></div></div>
+          </section>
+
+          <section class="report-items">
+            <h2>Itens verificados</h2>
+            ${rows}
+          </section>
+
+          <footer class="report-footer">Checklist ${escapeHtml(report.id)} · Gerado em ${generatedAt}</footer>
+        </article>
+      `;
     }
 
     function openReport(id) {
@@ -2524,11 +2780,32 @@
       win.document.write(`
         <!doctype html><html><head><title>Checklist ${report.id}</title>
         <style>
-          body{font-family:Arial,sans-serif;color:#17323b;margin:28px;}
-          h1{font-size:22px;margin-bottom:8px;} section{page-break-inside:avoid;border-top:1px solid #d8e1e4;padding:14px 0;}
-          h3{font-size:15px;margin-bottom:8px;} p{font-size:12px;color:#26373d;}
-          .pdf-photos{display:grid;gap:10px;grid-template-columns:repeat(2,minmax(0,1fr));}
-          .pdf-photos img{width:100%;height:auto;max-height:520px;object-fit:contain;border:1px solid #d8e1e4;background:#fff;}
+          @page{size:A4;margin:10mm;}
+          *{box-sizing:border-box;}
+          body{font-family:Arial,sans-serif;color:#45575d;margin:0;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+          .checklist-report{border:1px solid #cfdadd;font-size:12px;line-height:1.42;color:#45575d;}
+          .report-cover{display:flex;justify-content:space-between;gap:18px;padding:18px 22px;border-bottom:2px solid #cbd5d9;}
+          .report-brand{display:flex;align-items:center;gap:12px;}
+          .report-brand-mark{width:48px;height:48px;display:grid;place-items:center;background:#0099b8;color:#fff;font-weight:800;border:2px solid #dbe7ea;}
+          .report-brand strong,.report-checklist-id strong{display:block;color:#33474d;font-size:21px;letter-spacing:.02em;}
+          .report-brand span,.report-checklist-id span{display:block;color:#7a8b91;margin-top:3px;font-size:11px;}
+          .report-checklist-id{text-align:right;}
+          .report-section-title{padding:11px 22px;color:#45575d;font-size:14px;font-weight:800;text-transform:uppercase;border-bottom:1px solid #cfdadd;background:#fbfcfd;}
+          .report-meta-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 48px;padding:18px 22px 22px;}
+          .report-meta-item{display:grid;grid-template-columns:22px 1fr;gap:8px;align-items:start;}
+          .report-icon{color:#45575d;font-size:16px;line-height:1.1;}
+          .report-meta-item strong{display:block;color:#45575d;font-size:12px;}
+          .report-items{margin:0 22px 16px;padding:14px 18px 4px;border:1px solid #cfdadd;border-radius:4px;}
+          .report-items h2{color:#45575d;font-size:14px;margin:0 0 12px;text-transform:uppercase;border-bottom:1px solid #b8c5ca;padding-bottom:10px;}
+          .report-item{display:grid;grid-template-columns:24px 1fr;gap:10px;border-bottom:1px solid #e5ecef;padding:12px 0;break-inside:avoid;page-break-inside:avoid;}
+          .report-item:last-child{border-bottom:0;}
+          .report-item h3{color:#45575d;font-size:13px;margin:0 0 8px;text-transform:uppercase;}
+          .report-answer{margin:0 0 8px;color:#45575d;}
+          .report-observation{margin:0 0 8px;color:#45575d;font-size:11px;}
+          .report-photos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:8px;}
+          .report-photos img{width:100%;height:118px;object-fit:contain;border:1px solid #aebbc0;border-radius:4px;background:#f4f5f6;}
+          .report-signature{width:300px;max-width:100%;max-height:150px;object-fit:contain;margin-top:6px;display:block;}
+          .report-footer{color:#8a999e;border-top:1px solid #cfdadd;padding:8px 22px;font-size:10px;}
         </style></head><body>${reportHtml(report)}</body></html>
       `);
       win.document.close();
