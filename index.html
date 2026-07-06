@@ -1554,6 +1554,33 @@
 
           <div class="branch-summary" id="branchSummary"></div>
 
+          <section class="panel user-admin-panel">
+            <div class="panel-header">
+              <h2>Usuarios do sistema</h2>
+            </div>
+            <div class="panel-body">
+              <div class="form-row">
+                <div class="field">
+                  <label for="userFullName">Nome</label>
+                  <input id="userFullName" placeholder="Ex.: Anderson">
+                </div>
+                <div class="field">
+                  <label for="userLoginName">Usuario</label>
+                  <input id="userLoginName" placeholder="Ex.: anderson">
+                </div>
+                <div class="field">
+                  <label for="userPassword">Senha</label>
+                  <input id="userPassword" type="password" placeholder="Deixe em branco para manter">
+                </div>
+              </div>
+              <div class="top-actions" style="justify-content:space-between;margin-top:10px;">
+                <label class="toggle"><input type="checkbox" id="userIsAdmin"> Usuario administrador</label>
+                <button class="btn primary" id="saveUser">Salvar usuario</button>
+              </div>
+              <div id="usersList" class="route-admin-list" style="margin-top:14px;"></div>
+            </div>
+          </section>
+
           <div class="history-toolbar">
             <h2>Historico por filial</h2>
             <input class="history-search" id="historySearch" placeholder="Pesquisar por checklist, filial ou executor">
@@ -1924,6 +1951,103 @@
       renderDashboard();
     }
 
+    async function loadSystemUsers() {
+      if (!isAdminUser()) return;
+      const response = await fetch("/api/users", { cache: "no-store" }).catch(() => null);
+      if (!response || !response.ok) return;
+      const result = await response.json().catch(() => ({}));
+      systemUsers = Array.isArray(result.users) ? result.users : [];
+      renderUsers();
+    }
+
+    function clearUserForm() {
+      byId("userFullName").value = "";
+      byId("userLoginName").value = "";
+      byId("userPassword").value = "";
+      byId("userIsAdmin").checked = false;
+    }
+
+    async function saveSystemUser() {
+      const payload = {
+        name: byId("userFullName").value.trim(),
+        username: byId("userLoginName").value.trim(),
+        password: byId("userPassword").value,
+        role: byId("userIsAdmin").checked ? "admin" : "app"
+      };
+      if (!payload.username) {
+        window.alert("Informe o usuario.");
+        return;
+      }
+
+      const response = await fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      }).catch(() => null);
+      const result = response ? await response.json().catch(() => ({})) : {};
+      if (!response || !response.ok) {
+        window.alert(result.error || "Nao foi possivel salvar o usuario.");
+        return;
+      }
+
+      clearUserForm();
+      await loadSystemUsers();
+      window.alert(`Usuario "${result.user.username}" salvo com sucesso.`);
+    }
+
+    function editSystemUser(username) {
+      const user = systemUsers.find(item => item.username === username);
+      if (!user) return;
+      byId("userFullName").value = user.name || user.username;
+      byId("userLoginName").value = user.username;
+      byId("userPassword").value = "";
+      byId("userIsAdmin").checked = user.role === "admin";
+      byId("userLoginName").focus();
+    }
+
+    async function deleteSystemUser(username) {
+      const user = systemUsers.find(item => item.username === username);
+      if (!user) return;
+      const confirmed = window.confirm(`Excluir o usuario "${user.username}"?`);
+      if (!confirmed) return;
+
+      const response = await fetch(`/api/users/${encodeURIComponent(username)}`, { method: "DELETE" }).catch(() => null);
+      const result = response ? await response.json().catch(() => ({})) : {};
+      if (!response || !response.ok) {
+        window.alert(result.error || "Nao foi possivel excluir o usuario.");
+        return;
+      }
+      await loadSystemUsers();
+    }
+
+    function renderUsers() {
+      const list = byId("usersList");
+      if (!list) return;
+      list.innerHTML = "";
+      if (!systemUsers.length) {
+        list.innerHTML = `<div class="empty-state">Nenhum usuario cadastrado.</div>`;
+        return;
+      }
+
+      systemUsers.forEach(user => {
+        const row = document.createElement("div");
+        row.className = "route-admin-row";
+        row.innerHTML = `
+          <div>
+            <strong>${escapeHtml(user.name || user.username)}</strong>
+            <span>${escapeHtml(user.username)} - ${user.role === "admin" ? "Administrador" : "Usuario normal"}</span>
+          </div>
+          <div class="route-admin-actions">
+            <button class="btn small" data-edit-user="${escapeHtml(user.username)}">Editar</button>
+            <button class="btn small danger" data-delete-user="${escapeHtml(user.username)}">Excluir</button>
+          </div>
+        `;
+        row.querySelector("[data-edit-user]").addEventListener("click", () => editSystemUser(user.username));
+        row.querySelector("[data-delete-user]").addEventListener("click", () => deleteSystemUser(user.username));
+        list.append(row);
+      });
+    }
+
     let items = [];
     let expandedItemId = null;
     let routeSummaryOpen = false;
@@ -1934,6 +2058,7 @@
     let publishedChecklists = readStorageArray("publishedChecklists");
     let deletedHistoryIds = readStorageArray("deletedHistoryIds");
     let savedRoutes = readStorageArray("savedRoutes");
+    let systemUsers = [];
     let editingRouteId = null;
     let editingRouteLocationIds = null;
     let scannerStream = null;
@@ -2018,6 +2143,7 @@
       byId("appShell").hidden = false;
       applyAccessControl();
       await loadPublishedChecklists();
+      await loadSystemUsers();
       renderAll();
     }
 
@@ -2036,6 +2162,7 @@
       byId("appShell").hidden = false;
       applyAccessControl();
       await loadPublishedChecklists();
+      await loadSystemUsers();
       renderAll();
     }
 
@@ -3342,6 +3469,7 @@
       if (!currentUser) return;
       renderLocations();
       renderDashboard();
+      renderUsers();
       renderRouteSummary();
       renderTypeGrid();
       renderSavedRouteManager();
@@ -3365,6 +3493,7 @@
       }
     }));
     byId("newBlankRoute").addEventListener("click", resetRouteForm);
+    byId("saveUser").addEventListener("click", saveSystemUser);
     byId("saveRoute").addEventListener("click", saveCurrentRoute);
     byId("openTypeModal").addEventListener("click", () => modal.classList.add("open"));
     byId("closeTypeModal").addEventListener("click", () => modal.classList.remove("open"));
