@@ -1839,7 +1839,11 @@
     }
 
     function savePublishedChecklists() {
-      localStorage.setItem("publishedChecklists", JSON.stringify(publishedChecklists));
+      try {
+        localStorage.setItem("publishedChecklists", JSON.stringify(publishedChecklists));
+      } catch (error) {
+        localStorage.removeItem("publishedChecklists");
+      }
     }
 
     async function loadPublishedChecklists() {
@@ -2843,6 +2847,10 @@
     }
 
     function publishChecklist() {
+      const confirmButton = byId("confirmPublish");
+      confirmButton.disabled = true;
+      confirmButton.textContent = "Publicando...";
+
       const route = routeOptions().find(option => option.id === selectedRouteId) || routeOptions()[0];
       const routeItems = selectedRouteItems();
       const activeLocation = route.locations.find(location => location.id === selectedLocationId) || route.locations[0];
@@ -2858,17 +2866,30 @@
         finished: now.toLocaleDateString("pt-BR") + " - " + now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
         executor: currentUser?.name || currentUser?.username || "Unico Group",
         status: "Execucao finalizada",
-        answers: JSON.parse(JSON.stringify(mobileAnswers)),
-        items: JSON.parse(JSON.stringify(routeItems))
+        answers: mobileAnswers,
+        items: routeItems
       };
-      publishedChecklists.unshift(report);
-      savePublishedChecklists();
-      saveReportToServer(report);
+
       byId("publishModal").classList.remove("open");
       mobileStepIndex = routeItems.length;
-      renderDashboard();
-      byId("mobileItems").innerHTML = `<article class="answer-card"><h3>Checklist publicado</h3><p>Publicacao realizada com sucesso. O registro ja esta disponivel no historico.</p><button class="btn primary" data-go-history>Ver historico</button></article>`;
+      byId("mobileItems").innerHTML = `
+        <article class="answer-card">
+          <h3>Checklist publicado</h3>
+          <p>Publicacao iniciada com sucesso. As fotos estao sendo enviadas em alta qualidade para o historico.</p>
+          <button class="btn primary" data-go-history>Ver historico</button>
+        </article>
+      `;
       byId("mobileItems").querySelector("[data-go-history]").addEventListener("click", () => setView("dashboard"));
+
+      setTimeout(() => {
+        publishedChecklists.unshift(report);
+        savePublishedChecklists();
+        renderDashboard();
+        saveReportToServer(report).finally(() => {
+          confirmButton.disabled = false;
+          confirmButton.textContent = "Sim, publicar checklist";
+        });
+      }, 50);
     }
 
     function findReport(id) {
