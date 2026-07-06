@@ -1139,6 +1139,22 @@
       flex-direction: column;
     }
 
+    .report-modal > .panel-header {
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      background: #fff;
+      flex: 0 0 auto;
+      box-shadow: 0 1px 0 var(--line);
+    }
+
+    .report-modal #closeReportModal {
+      position: sticky;
+      top: 0;
+      flex: 0 0 auto;
+      background: #fff;
+    }
+
     .report-modal .panel-body {
       overflow: auto;
       background: #f6fafb;
@@ -2840,7 +2856,22 @@
     byId("cancelPublish").addEventListener("click", () => byId("publishModal").classList.remove("open"));
     byId("confirmPublish").addEventListener("click", publishChecklist);
     byId("closeScannerModal").addEventListener("click", closeScanner);
-    byId("closeReportModal").addEventListener("click", () => byId("reportModal").classList.remove("open"));
+    function closeReportModal() {
+      byId("reportModal").classList.remove("open");
+    }
+
+    byId("closeReportModal").addEventListener("click", closeReportModal);
+    byId("reportModal").addEventListener("click", event => {
+      if (event.target === byId("reportModal")) closeReportModal();
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape") {
+        byId("typeModal").classList.remove("open");
+        byId("publishModal").classList.remove("open");
+        byId("scannerModal").classList.remove("open");
+        closeReportModal();
+      }
+    });
     byId("historySearch").addEventListener("input", renderDashboard);
     byId("routeTitle").addEventListener("input", () => {
       renderRouteSummary();
