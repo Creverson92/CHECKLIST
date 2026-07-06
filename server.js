@@ -57,6 +57,14 @@ function readBody(request) {
   });
 }
 
+async function readJsonBody(request) {
+  try {
+    return JSON.parse(await readBody(request) || "{}");
+  } catch (error) {
+    return null;
+  }
+}
+
 function safeUser(user) {
   const username = user.username;
   const isCreverson = username.toLowerCase() === "creverson";
@@ -72,29 +80,35 @@ function sha256(value) {
 }
 
 function passwordMatches(user, password) {
-  if (user.password) return user.password === password;
+  if (user.password) return user.password.trim() === String(password);
   if (user.passwordHash) return user.passwordHash === sha256(password);
   return false;
 }
 
 const server = http.createServer(async (request, response) => {
-  if (request.method === "POST" && request.url === "/api/login") {
-    if (users.some(user => !user.password && !user.passwordHash)) {
-      return sendJson(response, 500, { error: "Credenciais do servidor nao configuradas." });
+  try {
+    if (request.method === "POST" && request.url === "/api/login") {
+      if (users.some(user => !user.password && !user.passwordHash)) {
+        return sendJson(response, 500, { error: "Credenciais do servidor nao configuradas." });
+      }
+
+      const payload = await readJsonBody(request);
+      if (!payload) return sendJson(response, 400, { error: "Requisicao de login invalida." });
+
+      const normalized = String(payload.username || "").trim().toLowerCase();
+      const user = users.find(entry => entry.username.toLowerCase() === normalized && passwordMatches(entry, payload.password));
+
+      if (!user) return sendJson(response, 401, { error: "Usuario ou senha invalidos." });
+
+      const token = crypto.randomBytes(32).toString("hex");
+      const maxAge = payload.remember ? 60 * 60 * 24 * 30 : 60 * 60 * 8;
+      sessions.set(token, safeUser(user));
+      return sendJson(response, 200, { user: safeUser(user) }, {
+        "Set-Cookie": `session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}`
+      });
     }
-
-    const payload = JSON.parse(await readBody(request) || "{}");
-    const normalized = String(payload.username || "").trim().toLowerCase();
-    const user = users.find(entry => entry.username.toLowerCase() === normalized && passwordMatches(entry, payload.password));
-
-    if (!user) return sendJson(response, 401, { error: "Usuario ou senha invalidos." });
-
-    const token = crypto.randomBytes(32).toString("hex");
-    const maxAge = payload.remember ? 60 * 60 * 24 * 30 : 60 * 60 * 8;
-    sessions.set(token, safeUser(user));
-    return sendJson(response, 200, { user: safeUser(user) }, {
-      "Set-Cookie": `session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}`
-    });
+  } catch (error) {
+    return sendJson(response, 500, { error: "Erro interno no login." });
   }
 
   if (request.method === "POST" && request.url === "/api/logout") {
