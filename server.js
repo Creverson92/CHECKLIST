@@ -5,6 +5,8 @@ const path = require("path");
 
 const port = process.env.PORT || 10000;
 const indexPath = path.join(__dirname, "index.html");
+const dataDir = process.env.DATA_DIR || path.join(__dirname, "data");
+const reportsPath = path.join(dataDir, "reports.json");
 const publicFiles = {
   "/manifest.json": { path: path.join(__dirname, "manifest.json"), type: "application/manifest+json" },
   "/icon.svg": { path: path.join(__dirname, "icon.svg"), type: "image/svg+xml" }
@@ -85,9 +87,26 @@ function passwordMatches(user, password) {
   return false;
 }
 
-const server = http.createServer(async (request, response) => {
+function readReports() {
   try {
-    if (request.method === "POST" && request.url === "/api/login") {
+    const reports = JSON.parse(fs.readFileSync(reportsPath, "utf8"));
+    return Array.isArray(reports) ? reports : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function writeReports(reports) {
+  fs.mkdirSync(dataDir, { recursive: true });
+  fs.writeFileSync(reportsPath, JSON.stringify(reports, null, 2));
+}
+
+const server = http.createServer(async (request, response) => {
+  const requestUrl = new URL(request.url, "http://localhost");
+  const pathname = requestUrl.pathname;
+
+  try {
+    if (request.method === "POST" && pathname === "/api/login") {
       if (users.some(user => !user.password && !user.passwordHash)) {
         return sendJson(response, 500, { error: "Credenciais do servidor nao configuradas." });
       }
@@ -111,7 +130,7 @@ const server = http.createServer(async (request, response) => {
     return sendJson(response, 500, { error: "Erro interno no login." });
   }
 
-  if (request.method === "POST" && request.url === "/api/logout") {
+  if (request.method === "POST" && pathname === "/api/logout") {
     const token = parseCookies(request).session;
     if (token) sessions.delete(token);
     return sendJson(response, 200, { ok: true }, {
@@ -119,16 +138,51 @@ const server = http.createServer(async (request, response) => {
     });
   }
 
-  if (request.method === "GET" && request.url === "/api/session") {
+  if (request.method === "GET" && pathname === "/api/session") {
     return sendJson(response, 200, { user: currentSession(request) });
   }
 
-  if (request.method === "GET" && publicFiles[request.url]) {
+  if (pathname === "/api/reports") {
+    const session = currentSession(request);
+    if (!session) return sendJson(response, 401, { error: "Sessao expirada." });
+
+    if (request.method === "GET") {
+      return sendJson(response, 200, { reports: readReports() });
+    }
+
+    if (request.method === "POST") {
+      const payload = await readJsonBody(request);
+      if (!payload || typeof payload !== "object") {
+        return sendJson(response, 400, { error: "Checklist invalido." });
+      }
+
+      const report = {
+        ...payload,
+        id: String(payload.id || Date.now()),
+        executor: payload.executor || session.name || session.username
+      };
+      const reports = readReports().filter(item => String(item.id) !== report.id);
+      reports.unshift(report);
+      writeReports(reports);
+      return sendJson(response, 201, { report });
+    }
+  }
+
+  if (request.method === "DELETE" && pathname.startsWith("/api/reports/")) {
+    const session = currentSession(request);
+    if (!session || session.role !== "admin") return sendJson(response, 403, { error: "Acesso negado." });
+
+    const id = decodeURIComponent(pathname.replace("/api/reports/", ""));
+    writeReports(readReports().filter(item => String(item.id) !== id));
+    return sendJson(response, 200, { ok: true });
+  }
+
+  if (request.method === "GET" && publicFiles[pathname]) {
     response.writeHead(200, {
-      "Content-Type": publicFiles[request.url].type,
+      "Content-Type": publicFiles[pathname].type,
       "Cache-Control": "public, max-age=300"
     });
-    response.end(fs.readFileSync(publicFiles[request.url].path));
+    response.end(fs.readFileSync(publicFiles[pathname].path));
     return;
   }
 

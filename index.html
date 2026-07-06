@@ -1817,6 +1817,38 @@
       localStorage.setItem("publishedChecklists", JSON.stringify(publishedChecklists));
     }
 
+    async function loadPublishedChecklists() {
+      const response = await fetch("/api/reports", { cache: "no-store" }).catch(() => null);
+      if (!response || !response.ok) return;
+
+      const result = await response.json().catch(() => ({}));
+      if (!Array.isArray(result.reports)) return;
+
+      publishedChecklists = result.reports;
+      savePublishedChecklists();
+      renderDashboard();
+    }
+
+    async function saveReportToServer(report) {
+      const response = await fetch("/api/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(report)
+      }).catch(() => null);
+
+      if (!response || !response.ok) return;
+
+      const result = await response.json().catch(() => ({}));
+      if (!result.report) return;
+
+      publishedChecklists = [
+        result.report,
+        ...publishedChecklists.filter(item => String(item.id) !== String(result.report.id))
+      ];
+      savePublishedChecklists();
+      renderDashboard();
+    }
+
     let items = JSON.parse(JSON.stringify(initialItems));
     let expandedItemId = null;
     let routeSummaryOpen = false;
@@ -1857,6 +1889,8 @@
       if (id === "mobile") {
         selectedRouteId = null;
         selectedLocationId = null;
+      } else if (id === "dashboard" && currentUser) {
+        loadPublishedChecklists();
       }
       views.forEach(view => view.classList.toggle("active", view.id === id));
       navButtons.forEach(button => button.classList.toggle("active", button.dataset.view === id));
@@ -1907,6 +1941,7 @@
       byId("loginScreen").hidden = true;
       byId("appShell").hidden = false;
       applyAccessControl();
+      await loadPublishedChecklists();
       renderAll();
     }
 
@@ -1924,6 +1959,7 @@
       byId("loginScreen").hidden = true;
       byId("appShell").hidden = false;
       applyAccessControl();
+      await loadPublishedChecklists();
       renderAll();
     }
 
@@ -2756,7 +2792,7 @@
       const activeLocation = route.locations.find(location => location.id === selectedLocationId) || route.locations[0];
       const now = new Date();
       const id = String(Date.now()).slice(-10);
-      publishedChecklists.unshift({
+      const report = {
         id,
         division: "Sul de Minas",
         branch: activeLocation.name.replace("Unico Logistica - ", ""),
@@ -2768,8 +2804,10 @@
         status: "Execucao finalizada",
         answers: JSON.parse(JSON.stringify(mobileAnswers)),
         items: JSON.parse(JSON.stringify(routeItems))
-      });
+      };
+      publishedChecklists.unshift(report);
       savePublishedChecklists();
+      saveReportToServer(report);
       byId("publishModal").classList.remove("open");
       mobileStepIndex = routeItems.length;
       renderDashboard();
@@ -2791,6 +2829,7 @@
       publishedChecklists = publishedChecklists.filter(item => item.id !== id);
       if (publishedChecklists.length !== publishedCount) {
         savePublishedChecklists();
+        fetch(`/api/reports/${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
       }
       const historyIndex = historyItems.findIndex(item => item.id === id);
       if (historyIndex >= 0 && !deletedHistoryIds.includes(id)) {
