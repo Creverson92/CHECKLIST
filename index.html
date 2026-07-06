@@ -1568,7 +1568,10 @@
               <h1>Adicionar roteiro</h1>
               <p class="lead">Modelo de checklist para recebimento e conferencia, com controle por localidade e tipos de resposta.</p>
             </div>
-            <button class="btn primary" id="openTypeModal">+ Incluir item</button>
+            <div class="top-actions">
+              <button class="btn" id="saveRoute">Salvar roteiro</button>
+              <button class="btn primary" id="openTypeModal">+ Incluir item</button>
+            </div>
           </div>
 
           <section class="panel route-summary" id="routeSummaryPanel">
@@ -1810,6 +1813,8 @@
     let mobileAnswers = {};
     let publishedChecklists = [];
     let deletedHistoryIds = JSON.parse(localStorage.getItem("deletedHistoryIds") || "[]");
+    let savedRoutes = JSON.parse(localStorage.getItem("savedRoutes") || "[]");
+    let editingRouteId = null;
     let scannerStream = null;
     let scannerTimer = null;
     let scannerTargetItemId = null;
@@ -1929,17 +1934,84 @@
       return chosen.length ? chosen : locations.slice(0, 1);
     }
 
-    function routeOptions() {
+    function persistSavedRoutes() {
+      localStorage.setItem("savedRoutes", JSON.stringify(savedRoutes));
+    }
+
+    function clone(value) {
+      return JSON.parse(JSON.stringify(value));
+    }
+
+    function routeLocationsFromIds(ids = []) {
+      const chosen = locations.filter(location => ids.includes(location.id));
+      return chosen.length ? chosen : locations.slice(0, 1);
+    }
+
+    function currentRouteDraft() {
       const title = byId("routeTitle")?.value.trim() || "Recebimento de cargas - UNICO";
       const routeLocations = selectedRouteLocations();
-      return [
-        {
-          id: "main",
-          title,
-          locations: routeLocations,
-          detail: `${items.length} itens cadastrados`
-        }
-      ];
+      return {
+        id: editingRouteId || "draft-main",
+        title,
+        description: byId("routeDescription")?.value.trim() || "",
+        locationIds: routeLocations.map(location => location.id),
+        locations: routeLocations,
+        items: clone(items),
+        detail: `${items.length} itens cadastrados`
+      };
+    }
+
+    function routeOptions() {
+      const routes = savedRoutes.map(route => ({
+        ...route,
+        locations: routeLocationsFromIds(route.locationIds),
+        detail: `${route.items?.length || 0} itens cadastrados`
+      }));
+      return routes.length ? routes : [currentRouteDraft()];
+    }
+
+    function selectedRouteItems() {
+      const route = routeOptions().find(option => option.id === selectedRouteId);
+      return route?.items || items;
+    }
+
+    function saveCurrentRoute() {
+      const draft = currentRouteDraft();
+      if (!draft.title.trim()) {
+        window.alert("Informe um titulo para salvar o roteiro.");
+        return;
+      }
+      if (!draft.items.length) {
+        window.alert("Inclua pelo menos um item antes de salvar o roteiro.");
+        return;
+      }
+
+      const sameTitleIndex = savedRoutes.findIndex(route => route.title.toLowerCase() === draft.title.toLowerCase());
+      const currentIndex = savedRoutes.findIndex(route => route.id === editingRouteId);
+      const index = currentIndex >= 0 ? currentIndex : sameTitleIndex;
+      const saved = {
+        id: index >= 0 ? savedRoutes[index].id : `route-${Date.now()}`,
+        title: draft.title,
+        description: draft.description,
+        locationIds: draft.locationIds,
+        items: draft.items,
+        updatedAt: new Date().toISOString()
+      };
+
+      if (index >= 0) {
+        savedRoutes[index] = saved;
+      } else {
+        savedRoutes.unshift(saved);
+      }
+      editingRouteId = saved.id;
+      selectedRouteId = null;
+      selectedLocationId = null;
+      mobileStepIndex = 0;
+      mobileAnswers = {};
+      persistSavedRoutes();
+      renderRoutePicker();
+      renderLocationPicker();
+      window.alert(`Roteiro "${saved.title}" salvo e disponivel no Aplicativo.`);
     }
 
     function input(value, placeholder, onChange) {
@@ -2382,13 +2454,14 @@
         target.innerHTML = "";
         return;
       }
+      const routeItems = selectedRouteItems();
       target.innerHTML = "";
-      if (!items.length) {
+      if (!routeItems.length) {
         target.innerHTML = `<div class="empty-state">Nenhuma pergunta cadastrada para este roteiro.</div>`;
         return;
       }
 
-      if (mobileStepIndex >= items.length) {
+      if (mobileStepIndex >= routeItems.length) {
         target.innerHTML = `
           <article class="answer-card">
             <h3>Checklist concluido</h3>
@@ -2408,11 +2481,11 @@
         return;
       }
 
-      const item = items[mobileStepIndex];
+      const item = routeItems[mobileStepIndex];
       const card = document.createElement("article");
       card.className = "answer-card";
       card.innerHTML = `
-        <div class="step-progress"><span>Pergunta ${mobileStepIndex + 1} de ${items.length}</span><strong>${item.required ? "Obrigatoria" : "Opcional"}</strong></div>
+        <div class="step-progress"><span>Pergunta ${mobileStepIndex + 1} de ${routeItems.length}</span><strong>${item.required ? "Obrigatoria" : "Opcional"}</strong></div>
         <h3>${mobileStepIndex + 1}. ${item.title}${item.required ? " *" : ""}</h3>
         <p>${item.support || typeLabel(item.type)}</p>
       `;
@@ -2513,7 +2586,7 @@
       });
       const next = document.createElement("button");
       next.className = "btn primary";
-      next.textContent = mobileStepIndex === items.length - 1 ? "Finalizar" : "Proxima";
+      next.textContent = mobileStepIndex === routeItems.length - 1 ? "Finalizar" : "Proxima";
       next.addEventListener("click", () => {
         if (!isMobileAnswerValid(item)) {
           warning.textContent = "Preencha esta pergunta obrigatoria antes de continuar.";
@@ -2666,6 +2739,7 @@
 
     function publishChecklist() {
       const route = routeOptions().find(option => option.id === selectedRouteId) || routeOptions()[0];
+      const routeItems = selectedRouteItems();
       const activeLocation = route.locations.find(location => location.id === selectedLocationId) || route.locations[0];
       const now = new Date();
       const id = String(Date.now()).slice(-10);
@@ -2680,10 +2754,10 @@
         executor: "Unico Group",
         status: "Execucao finalizada",
         answers: JSON.parse(JSON.stringify(mobileAnswers)),
-        items: JSON.parse(JSON.stringify(items))
+        items: JSON.parse(JSON.stringify(routeItems))
       });
       byId("publishModal").classList.remove("open");
-      mobileStepIndex = items.length;
+      mobileStepIndex = routeItems.length;
       renderDashboard();
       byId("mobileItems").innerHTML = `<article class="answer-card"><h3>Checklist publicado</h3><p>Publicacao realizada com sucesso. O registro ja esta disponivel no historico.</p><button class="btn primary" data-go-history>Ver historico</button></article>`;
       byId("mobileItems").querySelector("[data-go-history]").addEventListener("click", () => setView("dashboard"));
@@ -2847,6 +2921,7 @@
     document.querySelectorAll("[data-mobile-logout]").forEach(button => button.addEventListener("click", logout));
     navButtons.forEach(button => button.addEventListener("click", () => setView(button.dataset.view)));
     triggers.forEach(button => button.addEventListener("click", () => setView(button.dataset.viewTrigger)));
+    byId("saveRoute").addEventListener("click", saveCurrentRoute);
     byId("openTypeModal").addEventListener("click", () => modal.classList.add("open"));
     byId("closeTypeModal").addEventListener("click", () => modal.classList.remove("open"));
     modal.addEventListener("click", event => {
