@@ -1607,6 +1607,7 @@
     let mobileStepIndex = 0;
     let mobileAnswers = {};
     let publishedChecklists = [];
+    let deletedHistoryIds = JSON.parse(localStorage.getItem("deletedHistoryIds") || "[]");
     let scannerStream = null;
     let scannerTimer = null;
     let scannerTargetItemId = null;
@@ -1800,7 +1801,8 @@
       if (!summary || !rows) return;
 
       const query = (byId("historySearch")?.value || "").trim().toLowerCase();
-      const allHistory = [...publishedChecklists, ...historyItems];
+      const availableHistoryItems = historyItems.filter(item => !deletedHistoryIds.includes(item.id));
+      const allHistory = [...publishedChecklists, ...availableHistoryItems];
       const filtered = allHistory.filter(item => {
         const text = `${item.id} ${item.division} ${item.branch} ${item.route} ${item.object} ${item.executor}`.toLowerCase();
         return text.includes(query);
@@ -1830,7 +1832,7 @@
           <td>${item.finished}</td>
           <td>${item.executor}</td>
           <td><span class="status-pill">${item.status}</span></td>
-          <td><div class="report-actions"><button class="btn small" data-view-report="${item.id}">Ver</button><button class="btn small" data-export-report="${item.id}">PDF</button></div></td>
+          <td><div class="report-actions"><button class="btn small" data-view-report="${item.id}">Ver</button><button class="btn small" data-export-report="${item.id}">PDF</button><button class="btn small danger" data-delete-report="${item.id}">Excluir</button></div></td>
         `;
         rows.append(row);
       });
@@ -1844,6 +1846,9 @@
       });
       rows.querySelectorAll("[data-export-report]").forEach(button => {
         button.addEventListener("click", () => exportReportPdf(button.dataset.exportReport));
+      });
+      rows.querySelectorAll("[data-delete-report]").forEach(button => {
+        button.addEventListener("click", () => deleteReport(button.dataset.deleteReport));
       });
     }
 
@@ -2473,7 +2478,24 @@
     }
 
     function findReport(id) {
-      return [...publishedChecklists, ...historyItems].find(item => item.id === id);
+      return [...publishedChecklists, ...historyItems.filter(item => !deletedHistoryIds.includes(item.id))].find(item => item.id === id);
+    }
+
+    function deleteReport(id) {
+      const report = findReport(id);
+      if (!report) return;
+      const confirmed = window.confirm(`Tem certeza que deseja excluir o checklist ${report.id}? Esta acao nao pode ser desfeita.`);
+      if (!confirmed) return;
+
+      publishedChecklists = publishedChecklists.filter(item => item.id !== id);
+      const historyIndex = historyItems.findIndex(item => item.id === id);
+      if (historyIndex >= 0 && !deletedHistoryIds.includes(id)) {
+        deletedHistoryIds.push(id);
+        localStorage.setItem("deletedHistoryIds", JSON.stringify(deletedHistoryIds));
+      }
+
+      byId("reportModal").classList.remove("open");
+      renderDashboard();
     }
 
     function reportHtml(report) {
