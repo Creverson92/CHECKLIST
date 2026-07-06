@@ -3072,7 +3072,15 @@
     byId("logoutButton").addEventListener("click", logout);
     document.querySelectorAll("[data-mobile-logout]").forEach(button => button.addEventListener("click", logout));
     navButtons.forEach(button => button.addEventListener("click", () => setView(button.dataset.view)));
-    triggers.forEach(button => button.addEventListener("click", () => setView(button.dataset.viewTrigger)));
+    triggers.forEach(button => button.addEventListener("click", () => {
+      const target = button.dataset.viewTrigger;
+      setView(target);
+      if (target === "builder") {
+        routeSummaryOpen = true;
+        renderRouteSummary();
+        byId("routeSummaryPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }));
     byId("saveRoute").addEventListener("click", saveCurrentRoute);
     byId("openTypeModal").addEventListener("click", () => modal.classList.add("open"));
     byId("closeTypeModal").addEventListener("click", () => modal.classList.remove("open"));
