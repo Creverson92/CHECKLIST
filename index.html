@@ -915,6 +915,39 @@
       font-weight: 700;
     }
 
+    .route-admin-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .route-admin-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border: 1px solid var(--line);
+      background: #fff;
+      padding: 12px;
+    }
+
+    .route-admin-row strong,
+    .route-admin-row span {
+      display: block;
+    }
+
+    .route-admin-row span {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 3px;
+    }
+
+    .route-admin-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
     .phone-top {
       background: var(--navy);
       color: #fff;
@@ -1594,19 +1627,29 @@
         <section class="view" id="builder">
           <div class="page-title">
             <div>
-              <h1>Adicionar roteiro</h1>
-              <p class="lead">Modelo de checklist para recebimento e conferencia, com controle por localidade e tipos de resposta.</p>
+              <h1>Roteiros</h1>
+              <p class="lead">Crie, edite e organize os roteiros disponiveis para preenchimento no aplicativo.</p>
             </div>
             <div class="top-actions">
+              <button class="btn" id="newBlankRoute">Novo em branco</button>
               <button class="btn" id="saveRoute">Salvar roteiro</button>
               <button class="btn primary" id="openTypeModal">+ Incluir item</button>
             </div>
           </div>
 
+          <section class="panel route-manager">
+            <div class="panel-header">
+              <h2>Roteiros cadastrados</h2>
+            </div>
+            <div class="panel-body">
+              <div id="savedRouteList" class="route-admin-list"></div>
+            </div>
+          </section>
+
           <section class="panel route-summary" id="routeSummaryPanel">
             <div class="route-summary-header" id="routeSummaryHeader">
               <div>
-                <strong id="routeSummaryTitle">Recebimento de cargas - UNICO</strong>
+                <strong id="routeSummaryTitle">Novo roteiro</strong>
                 <span>Clique para expandir as configuracoes do roteiro</span>
               </div>
               <button class="btn small" id="toggleRouteSummary" type="button">Expandir</button>
@@ -1614,11 +1657,11 @@
             <div class="panel-body" id="routeSummaryBody" hidden>
               <div class="field">
                 <label for="routeTitle">Titulo</label>
-                <input id="routeTitle" value="Recebimento de cargas - UNICO">
+                <input id="routeTitle" value="" placeholder="Digite o nome do roteiro">
               </div>
               <div class="field">
                 <label for="routeDescription">Descricao</label>
-                <textarea id="routeDescription">Checklist para recebimento, conferencia de veiculo, notas fiscais, evidencias fotograficas, codigo de barras, QR Code e assinatura do motorista.</textarea>
+                <textarea id="routeDescription" placeholder="Descreva o objetivo do roteiro"></textarea>
               </div>
               <div class="field">
                 <label>Restringir por localidades</label>
@@ -1629,7 +1672,6 @@
               <div class="embedded-section">
                 <div class="embedded-section-header">
                   <h2>Criacao do roteiro</h2>
-                  <button class="btn small" id="resetDemo">Restaurar exemplo</button>
                 </div>
                 <div id="builderItems" class="item-list"></div>
               </div>
@@ -1882,7 +1924,7 @@
       renderDashboard();
     }
 
-    let items = JSON.parse(JSON.stringify(initialItems));
+    let items = [];
     let expandedItemId = null;
     let routeSummaryOpen = false;
     let selectedRouteId = null;
@@ -1893,6 +1935,7 @@
     let deletedHistoryIds = readStorageArray("deletedHistoryIds");
     let savedRoutes = readStorageArray("savedRoutes");
     let editingRouteId = null;
+    let editingRouteLocationIds = null;
     let scannerStream = null;
     let scannerTimer = null;
     let scannerTargetItemId = null;
@@ -2012,6 +2055,7 @@
 
     function selectedRouteLocations() {
       const checked = [...document.querySelectorAll("#routeLocations input:checked")].map(input => Number(input.dataset.locationId));
+      editingRouteLocationIds = checked;
       const chosen = locations.filter(location => checked.includes(location.id));
       return chosen.length ? chosen : locations.slice(0, 1);
     }
@@ -2030,7 +2074,7 @@
     }
 
     function currentRouteDraft() {
-      const title = byId("routeTitle")?.value.trim() || "Recebimento de cargas - UNICO";
+      const title = byId("routeTitle")?.value.trim() || "";
       const routeLocations = selectedRouteLocations();
       return {
         id: editingRouteId || "draft-main",
@@ -2044,17 +2088,16 @@
     }
 
     function routeOptions() {
-      const routes = savedRoutes.map(route => ({
+      return savedRoutes.map(route => ({
         ...route,
         locations: routeLocationsFromIds(route.locationIds),
         detail: `${route.items?.length || 0} itens cadastrados`
       }));
-      return routes.length ? routes : [currentRouteDraft()];
     }
 
     function selectedRouteItems() {
       const route = routeOptions().find(option => option.id === selectedRouteId);
-      return route?.items || items;
+      return route?.items || [];
     }
 
     function saveCurrentRoute() {
@@ -2086,6 +2129,7 @@
         savedRoutes.unshift(saved);
       }
       editingRouteId = saved.id;
+      editingRouteLocationIds = saved.locationIds;
       selectedRouteId = null;
       selectedLocationId = null;
       mobileStepIndex = 0;
@@ -2093,7 +2137,82 @@
       persistSavedRoutes();
       renderRoutePicker();
       renderLocationPicker();
+      renderSavedRouteManager();
       window.alert(`Roteiro "${saved.title}" salvo e disponivel no Aplicativo.`);
+    }
+
+    function resetRouteForm() {
+      editingRouteId = null;
+      editingRouteLocationIds = null;
+      expandedItemId = null;
+      items = [];
+      byId("routeTitle").value = "";
+      byId("routeDescription").value = "";
+      routeSummaryOpen = true;
+      selectedRouteId = null;
+      selectedLocationId = null;
+      mobileStepIndex = 0;
+      mobileAnswers = {};
+      renderAll();
+    }
+
+    function editSavedRoute(id) {
+      const route = savedRoutes.find(entry => entry.id === id);
+      if (!route) return;
+      editingRouteId = route.id;
+      editingRouteLocationIds = route.locationIds || [];
+      expandedItemId = null;
+      items = clone(route.items || []);
+      byId("routeTitle").value = route.title || "";
+      byId("routeDescription").value = route.description || "";
+      routeSummaryOpen = true;
+      selectedRouteId = null;
+      selectedLocationId = null;
+      mobileStepIndex = 0;
+      mobileAnswers = {};
+      renderAll();
+      byId("routeSummaryPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    function deleteSavedRoute(id) {
+      const route = savedRoutes.find(entry => entry.id === id);
+      if (!route) return;
+      const confirmed = window.confirm(`Excluir o roteiro "${route.title}"? Esta acao nao remove checklists ja publicados no historico.`);
+      if (!confirmed) return;
+      savedRoutes = savedRoutes.filter(entry => entry.id !== id);
+      if (editingRouteId === id) resetRouteForm();
+      selectedRouteId = selectedRouteId === id ? null : selectedRouteId;
+      persistSavedRoutes();
+      renderAll();
+    }
+
+    function renderSavedRouteManager() {
+      const list = byId("savedRouteList");
+      if (!list) return;
+      list.innerHTML = "";
+      if (!savedRoutes.length) {
+        list.innerHTML = `<div class="empty-state">Nenhum roteiro cadastrado. Clique em "Novo em branco" para criar o primeiro.</div>`;
+        return;
+      }
+
+      savedRoutes.forEach(route => {
+        const row = document.createElement("div");
+        row.className = "route-admin-row";
+        const locationNames = routeLocationsFromIds(route.locationIds).map(location => location.name).join(" / ");
+        row.innerHTML = `
+          <div>
+            <strong>${escapeHtml(route.title)}</strong>
+            <span>${route.items?.length || 0} itens cadastrados - ${escapeHtml(locationNames)}</span>
+          </div>
+          <div class="route-admin-actions">
+            <button class="btn small" data-edit-route="${route.id}">Editar</button>
+            <button class="btn small danger" data-delete-route="${route.id}">Excluir</button>
+          </div>
+        `;
+        row.querySelector("[data-edit-route]").addEventListener("click", () => editSavedRoute(route.id));
+        row.querySelector("[data-delete-route]").addEventListener("click", () => deleteSavedRoute(route.id));
+        list.append(row);
+      });
     }
 
     function input(value, placeholder, onChange) {
@@ -2159,10 +2278,14 @@
       const routeLocations = byId("routeLocations");
       routeLocations.innerHTML = "";
       locations.forEach((location, index) => {
+        const checked = Array.isArray(editingRouteLocationIds)
+          ? editingRouteLocationIds.includes(location.id)
+          : index < 1;
         const label = document.createElement("label");
         label.className = "pill";
-        label.innerHTML = `<input type="checkbox" data-location-id="${location.id}" ${index < 2 ? "checked" : ""}> ${location.name}`;
+        label.innerHTML = `<input type="checkbox" data-location-id="${location.id}" ${checked ? "checked" : ""}> ${location.name}`;
         label.querySelector("input").addEventListener("change", () => {
+          editingRouteLocationIds = [...document.querySelectorAll("#routeLocations input:checked")].map(input => Number(input.dataset.locationId));
           selectedLocationId = null;
           renderRoutePicker();
           renderLocationPicker();
@@ -2230,7 +2353,7 @@
 
     function renderRouteSummary() {
       const titleInput = byId("routeTitle");
-      const title = titleInput?.value.trim() || "Roteiro sem titulo";
+      const title = titleInput?.value.trim() || (editingRouteId ? "Roteiro sem titulo" : "Novo roteiro");
       byId("routeSummaryTitle").textContent = title;
       byId("routeSummaryBody").hidden = !routeSummaryOpen;
       byId("toggleRouteSummary").textContent = routeSummaryOpen ? "Recolher" : "Expandir";
@@ -2249,6 +2372,11 @@
       locationPicker.hidden = !selected || !!selectedLocationId || (selected.locations || []).length <= 1;
       preview.hidden = !selected || (!selectedLocationId && (selected.locations || []).length > 1);
       grid.innerHTML = "";
+
+      if (!routes.length) {
+        grid.innerHTML = `<div class="empty-state">Nenhum roteiro cadastrado para iniciar checklist.</div>`;
+        return;
+      }
 
       routes.forEach(route => {
         const button = document.createElement("button");
@@ -2325,8 +2453,8 @@
       });
     }
 
-    function addItem(type) {
-      const defaults = {
+    function typeDefaults(type) {
+      const options = {
         positive: ["Conforme", "Nao conforme"],
         multi: ["Opcao 1", "Opcao 2"],
         single: ["Tudo OK", "Nao OK"],
@@ -2337,21 +2465,56 @@
         barcode: [],
         signature: []
       };
+      return {
+        options: options[type] || [],
+        min: type === "media" ? 1 : "",
+        max: type === "media" ? 30 : "",
+        evidence: type !== "signature",
+        mediaMode: "camera",
+        evidenceMode: "both"
+      };
+    }
+
+    function updateItemType(item, type) {
+      if (item.type === type) return;
+      const defaults = typeDefaults(type);
+      item.type = type;
+      item.options = clone(defaults.options);
+      item.min = defaults.min;
+      item.max = defaults.max;
+      item.evidence = defaults.evidence;
+      item.mediaMode = defaults.mediaMode;
+      item.evidenceMode = defaults.evidenceMode;
+      renderAll();
+    }
+
+    function addItem(type) {
+      const defaults = typeDefaults(type);
       items.push({
         id: Date.now(),
         type,
         title: `Novo item - ${typeLabel(type)}`,
         support: "",
-        min: type === "media" ? 1 : "",
-        max: type === "media" ? 30 : "",
+        min: defaults.min,
+        max: defaults.max,
         observations: true,
-        evidence: type !== "signature",
+        evidence: defaults.evidence,
         required: false,
-        mediaMode: "camera",
-        evidenceMode: "both",
-        options: defaults[type] || []
+        mediaMode: defaults.mediaMode,
+        evidenceMode: defaults.evidenceMode,
+        options: clone(defaults.options)
       });
       expandedItemId = items[items.length - 1].id;
+      renderAll();
+    }
+
+    function moveItem(id, direction) {
+      const index = items.findIndex(entry => entry.id === id);
+      const targetIndex = index + direction;
+      if (index < 0 || targetIndex < 0 || targetIndex >= items.length) return;
+      const [item] = items.splice(index, 1);
+      items.splice(targetIndex, 0, item);
+      expandedItemId = id;
       renderAll();
     }
 
@@ -2396,6 +2559,22 @@
           });
           const actions = document.createElement("div");
           actions.className = "item-actions";
+          const up = document.createElement("button");
+          up.className = "btn small";
+          up.textContent = "Subir";
+          up.disabled = index === 0;
+          up.addEventListener("click", event => {
+            event.stopPropagation();
+            moveItem(item.id, -1);
+          });
+          const down = document.createElement("button");
+          down.className = "btn small";
+          down.textContent = "Descer";
+          down.disabled = index === items.length - 1;
+          down.addEventListener("click", event => {
+            event.stopPropagation();
+            moveItem(item.id, 1);
+          });
           const edit = document.createElement("button");
           edit.className = "btn small";
           edit.textContent = isOpen ? "Recolher" : "Editar";
@@ -2422,7 +2601,7 @@
             if (expandedItemId === item.id) expandedItemId = null;
             renderAll();
           });
-          actions.append(edit, clone, del);
+          actions.append(up, down, edit, clone, del);
           header.append(actions);
         }
 
@@ -2432,6 +2611,20 @@
         if (compact) {
           body.innerHTML = `<p class="lead">${item.support || "Sem frase de apoio"}</p>`;
         } else if (isOpen) {
+          const typeField = document.createElement("div");
+          typeField.className = "field";
+          typeField.innerHTML = "<label>Tipo da pergunta</label>";
+          const typeSelect = document.createElement("select");
+          questionTypes.forEach(type => {
+            const option = document.createElement("option");
+            option.value = type.id;
+            option.textContent = type.label;
+            typeSelect.append(option);
+          });
+          typeSelect.value = item.type;
+          typeSelect.addEventListener("change", event => updateItemType(item, event.target.value));
+          typeField.append(typeSelect);
+
           const titleField = document.createElement("div");
           titleField.className = "field";
           titleField.innerHTML = "<label>Pergunta</label>";
@@ -2457,7 +2650,7 @@
             })
           );
 
-          body.append(titleField, supportField, checks);
+          body.append(typeField, titleField, supportField, checks);
 
           if (["multi", "single", "positive"].includes(item.type)) {
             body.append(renderOptionEditor(item));
@@ -2927,7 +3120,14 @@
       confirmButton.disabled = true;
       confirmButton.textContent = "Publicando...";
 
-      const route = routeOptions().find(option => option.id === selectedRouteId) || routeOptions()[0];
+      const route = routeOptions().find(option => option.id === selectedRouteId);
+      if (!route) {
+        confirmButton.disabled = false;
+        confirmButton.textContent = "Sim, publicar checklist";
+        byId("publishModal").classList.remove("open");
+        window.alert("Selecione um roteiro salvo antes de publicar o checklist.");
+        return;
+      }
       const routeItems = selectedRouteItems();
       const activeLocation = route.locations.find(location => location.id === selectedLocationId) || route.locations[0];
       const now = new Date();
@@ -3144,6 +3344,7 @@
       renderDashboard();
       renderRouteSummary();
       renderTypeGrid();
+      renderSavedRouteManager();
       renderBuilderItems("builderItems");
       renderMobileItems();
     }
@@ -3159,11 +3360,11 @@
       const target = button.dataset.viewTrigger;
       setView(target);
       if (target === "builder") {
-        routeSummaryOpen = true;
-        renderRouteSummary();
+        resetRouteForm();
         byId("routeSummaryPanel").scrollIntoView({ behavior: "smooth", block: "start" });
       }
     }));
+    byId("newBlankRoute").addEventListener("click", resetRouteForm);
     byId("saveRoute").addEventListener("click", saveCurrentRoute);
     byId("openTypeModal").addEventListener("click", () => modal.classList.add("open"));
     byId("closeTypeModal").addEventListener("click", () => modal.classList.remove("open"));
@@ -3217,12 +3418,6 @@
       });
       byId("locationName").value = "";
       byId("locationAddress").value = "";
-      renderAll();
-    });
-
-    byId("resetDemo").addEventListener("click", () => {
-      items = JSON.parse(JSON.stringify(initialItems));
-      expandedItemId = null;
       renderAll();
     });
 
