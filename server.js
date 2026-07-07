@@ -39,6 +39,118 @@ const seedLocations = [
   { id: 3, name: "Unico Logistica - Filial Sao Paulo", type: "Filial", address: "Av. Brig. Faria Lima, Sao Paulo-SP" }
 ];
 
+const seedRouteItems = [
+  {
+    id: 101,
+    type: "multi",
+    title: "A carga veio em qual situacao?",
+    support: "Selecione uma opcao",
+    min: 1,
+    max: 10,
+    observations: true,
+    evidence: true,
+    required: true,
+    options: ["Em conformidade", "Fora do padrao", "Mais ou menos"]
+  },
+  {
+    id: 102,
+    type: "single",
+    title: "Como esta o veiculo?",
+    support: "Avalie o estado geral do veiculo",
+    min: 1,
+    max: 10,
+    observations: true,
+    evidence: true,
+    required: true,
+    options: ["Tudo OK", "Quebrado"]
+  },
+  {
+    id: 103,
+    type: "positive",
+    title: "Carga paletizada corretamente?",
+    support: "Conferencia visual obrigatoria",
+    observations: true,
+    evidence: false,
+    required: false,
+    options: ["Sim", "Nao"]
+  },
+  {
+    id: 104,
+    type: "media",
+    title: "Registre imagens do recebimento",
+    support: "Fotos bem nitidas",
+    min: 1,
+    max: 30,
+    observations: true,
+    evidence: false,
+    required: true,
+    mediaMode: "Camera e foto da galeria"
+  },
+  {
+    id: 105,
+    type: "number",
+    title: "Nota fiscal",
+    support: "Registre numero da nota fiscal",
+    min: 1,
+    max: 30,
+    observations: true,
+    evidence: true,
+    required: false
+  },
+  {
+    id: 106,
+    type: "text",
+    title: "Nome do motorista",
+    support: "Nome completo",
+    observations: true,
+    evidence: false,
+    required: false
+  },
+  {
+    id: 107,
+    type: "barcode",
+    title: "Codigo da carga",
+    support: "Bipe o codigo de barras ou QR Code",
+    observations: false,
+    evidence: false,
+    required: true
+  },
+  {
+    id: 108,
+    type: "signature",
+    title: "Assinatura do motorista",
+    support: "Confirme a ciencia do recebimento",
+    observations: false,
+    evidence: false,
+    required: true
+  }
+];
+
+const seedRoutes = [
+  {
+    id: "recebimento-verallia",
+    title: "Recebimento Verallia",
+    description: "Checklist operacional para recebimento Verallia.",
+    locationIds: [1, 2, 3],
+    items: seedRouteItems,
+    updatedAt: new Date(0).toISOString()
+  },
+  {
+    id: "expedicao-verallia",
+    title: "Expedicao Verallia",
+    description: "Checklist operacional para expedicao Verallia.",
+    locationIds: [1, 2, 3],
+    items: seedRouteItems.map(item => item.id === 104
+      ? { ...item, title: "Registre imagens da expedicao" }
+      : item),
+    updatedAt: new Date(0).toISOString()
+  }
+];
+
+function cloneData(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
 function sendJson(response, status, body, headers = {}) {
   response.writeHead(status, {
     "Content-Type": "application/json",
@@ -145,10 +257,11 @@ function writeReports(reports) {
 
 function readRoutes() {
   try {
+    if (!fs.existsSync(routesPath)) return cloneData(seedRoutes);
     const routes = JSON.parse(fs.readFileSync(routesPath, "utf8"));
-    return Array.isArray(routes) ? routes : [];
+    return Array.isArray(routes) ? routes : cloneData(seedRoutes);
   } catch (error) {
-    return [];
+    return cloneData(seedRoutes);
   }
 }
 
