@@ -306,17 +306,12 @@
     .header-brand {
       display: flex;
       align-items: center;
-      gap: 14px;
+      gap: 0;
       min-width: 0;
     }
 
     .header-logo {
-      width: 160px;
-      height: auto;
-      display: block;
-      flex: 0 0 auto;
-      background: #050505;
-      padding: 4px 6px;
+      display: none;
     }
 
     .top-actions {
@@ -990,12 +985,7 @@
     }
 
     .mobile-header-logo {
-      width: 136px;
-      height: auto;
-      display: block;
-      background: #050505;
-      padding: 3px 5px;
-      flex: 0 0 auto;
+      display: none;
     }
 
     .phone-top strong {
@@ -1237,6 +1227,11 @@
 
     .signature-shell:fullscreen .signature-tools {
       flex: 0 0 auto;
+    }
+
+    .signature-shell:fullscreen .signature-tools .btn {
+      min-height: 52px;
+      font-size: 16px;
     }
 
     .signature-tools {
@@ -1527,24 +1522,38 @@
 
     @media (max-width: 960px) {
       .app-shell {
-        grid-template-columns: 1fr;
+        display: block;
       }
 
       .sidebar {
         height: auto;
         position: static;
         display: grid;
-        gap: 12px;
+        gap: 14px;
+        padding: 18px 16px;
+      }
+
+      .sidebar .brand {
+        margin-bottom: 0;
+      }
+
+      .sidebar .brand-logo {
+        width: min(240px, 76vw);
       }
 
       .nav {
-        display: flex;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 8px;
-        overflow: auto;
+        overflow: visible;
       }
 
       .nav-button {
-        min-width: 166px;
+        min-width: 0;
+        min-height: 46px;
+        margin-bottom: 0;
+        padding: 10px;
+        font-size: 14px;
       }
 
       .grid.two,
@@ -1576,11 +1585,41 @@
         padding-left: 16px;
         padding-right: 16px;
       }
+
+      .topbar {
+        height: auto;
+        position: static;
+        align-items: stretch;
+        display: grid;
+        gap: 12px;
+        padding-top: 14px;
+        padding-bottom: 14px;
+      }
+
+      .header-brand {
+        width: 100%;
+      }
+
+      .crumb {
+        line-height: 1.35;
+      }
+
+      .top-actions {
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .top-actions .btn,
+      .top-actions .pill {
+        width: 100%;
+        min-height: 42px;
+      }
     }
 
     @media (max-width: 560px) {
       .page-title,
-      .topbar,
       .panel-header {
         align-items: flex-start;
         flex-direction: column;
@@ -1604,7 +1643,29 @@
       }
 
       .main {
-        padding-top: 18px;
+        padding: 18px 14px 28px;
+      }
+
+      .topbar {
+        padding: 12px 14px;
+      }
+
+      .top-actions {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .top-actions .pill {
+        grid-column: 1 / -1;
+      }
+
+      h1 {
+        font-size: 28px;
+        line-height: 1.15;
+      }
+
+      .btn {
+        padding-left: 10px;
+        padding-right: 10px;
       }
     }
   </style>
@@ -3377,6 +3438,7 @@
             <canvas class="signature" width="720" height="320" data-signature-id="${item.id}"></canvas>
             <div class="signature-tools">
               <button class="btn small" data-full-signature type="button">Tela cheia</button>
+              <button class="btn small primary" data-save-signature type="button">Salvar assinatura e fechar</button>
               <button class="btn small" data-clear-signature type="button">Limpar assinatura</button>
             </div>
           </div>
@@ -3506,12 +3568,21 @@
           const rect = canvas.getBoundingClientRect();
           const ratio = window.devicePixelRatio || 1;
           if (!rect.width || !rect.height) return;
+          const signatureId = canvas.dataset.signatureId;
+          const savedDrawing = signatureId
+            ? (mobileAnswers[signatureId]?.signatureUrl || (canvas.width && canvas.height ? canvas.toDataURL("image/png") : ""))
+            : "";
           canvas.width = Math.floor(rect.width * ratio);
           canvas.height = Math.floor(rect.height * ratio);
           ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
           ctx.lineWidth = 2.6;
           ctx.lineCap = "round";
           ctx.strokeStyle = "#111111";
+          if (savedDrawing) {
+            const image = new Image();
+            image.onload = () => ctx.drawImage(image, 0, 0, rect.width, rect.height);
+            image.src = savedDrawing;
+          }
         }
 
         function point(event) {
@@ -3553,6 +3624,27 @@
           drawing = false;
         }
 
+        async function saveSignatureAndClose() {
+          if (!canvas.dataset.signatureId) return;
+          const current = mobileAnswers[canvas.dataset.signatureId] || {};
+          if (!current.value) {
+            window.alert("Assine antes de salvar.");
+            return;
+          }
+          mobileAnswers[canvas.dataset.signatureId] = {
+            ...current,
+            value: true,
+            signatureUrl: canvas.toDataURL("image/png")
+          };
+          if (document.fullscreenElement) {
+            await document.exitFullscreen().catch(() => {});
+            if (screen.orientation?.unlock) screen.orientation.unlock();
+          }
+          const fullButton = canvas.parentElement.querySelector("[data-full-signature]");
+          if (fullButton) fullButton.textContent = "Tela cheia";
+          resizeCanvas();
+        }
+
         canvas.addEventListener("mousedown", start);
         canvas.addEventListener("mousemove", move);
         window.addEventListener("mouseup", end);
@@ -3579,6 +3671,9 @@
           full.textContent = "Sair da tela cheia";
           setTimeout(resizeCanvas, 200);
         });
+
+        const save = canvas.parentElement.querySelector("[data-save-signature]");
+        if (save) save.addEventListener("click", saveSignatureAndClose);
 
         const clear = canvas.parentElement.querySelector("[data-clear-signature]");
         if (clear) clear.addEventListener("click", () => {
