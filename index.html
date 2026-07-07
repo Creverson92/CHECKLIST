@@ -3402,16 +3402,8 @@
       const keepButton = wrap.querySelector("[data-keep-photo]");
       if (keepButton && pendingReview) {
         keepButton.addEventListener("click", () => {
-          const current = [...(mobileAnswers[item.id]?.[answerKey] || [])];
-          if (current.length < pendingReview.max) {
-            current.push(pendingReview.photo);
-            mobileAnswers[item.id] = {
-              ...mobileAnswers[item.id],
-              ...(pendingReview.countAsValue ? { value: current.length } : {}),
-              [answerKey]: current
-            };
-          }
-          if (pendingReview.source === "camera" && current.length < pendingReview.max && current.length < pendingReview.min) {
+          const savedCount = savePhotoAnswer(item, pendingReview.answerKey, pendingReview.photo, pendingReview.countAsValue, pendingReview.max);
+          if (pendingReview.source === "camera" && savedCount < pendingReview.max && savedCount < pendingReview.min) {
             autoOpenPhotoRequest = { itemId: item.id, answerKey };
           }
           pendingPhotoReview = null;
@@ -3438,7 +3430,14 @@
           try {
             const currentCount = (mobileAnswers[item.id]?.[answerKey] || []).length;
             const photo = await readPhotoFile(file, `${title} ${currentCount + 1}`);
-            pendingPhotoReview = { itemId: item.id, answerKey, countAsValue, source, photo, max, min };
+            if (source === "camera") {
+              const savedCount = savePhotoAnswer(item, answerKey, photo, countAsValue, max);
+              if (savedCount < max && savedCount < min) {
+                autoOpenPhotoRequest = { itemId: item.id, answerKey };
+              }
+            } else {
+              pendingPhotoReview = { itemId: item.id, answerKey, countAsValue, source, photo, max, min };
+            }
             renderMobileItems();
           } finally {
             event.target.value = "";
@@ -3446,6 +3445,18 @@
         });
       });
       return wrap;
+    }
+
+    function savePhotoAnswer(item, answerKey, photo, countAsValue, max) {
+      const current = [...(mobileAnswers[item.id]?.[answerKey] || [])];
+      if (current.length >= max) return current.length;
+      current.push(photo);
+      mobileAnswers[item.id] = {
+        ...mobileAnswers[item.id],
+        ...(countAsValue ? { value: current.length } : {}),
+        [answerKey]: current
+      };
+      return current.length;
     }
 
     function renderMobileItems() {
