@@ -281,37 +281,98 @@
     }
 
     .topbar {
-      height: 68px;
-      background: rgba(255,255,255,.88);
-      border-bottom: 1px solid var(--line);
+      min-height: 74px;
+      background: #111;
+      border-bottom: 4px solid var(--brand);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 28px;
-      backdrop-filter: blur(10px);
+      gap: 18px;
+      padding: 0 18px 0 0;
       position: sticky;
       top: 0;
       z-index: 5;
     }
 
     .crumb {
-      color: var(--muted);
+      color: rgba(255,255,255,.74);
       font-size: 13px;
     }
 
     .crumb strong {
-      color: var(--brand-dark);
+      color: #fff;
+    }
+
+    .topbar .crumb {
+      display: none;
     }
 
     .header-brand {
       display: flex;
       align-items: center;
-      gap: 0;
+      gap: 24px;
       min-width: 0;
+      align-self: stretch;
     }
 
     .header-logo {
       display: none;
+    }
+
+    .top-logo-card {
+      width: 222px;
+      min-height: 70px;
+      background: #fff;
+      display: grid;
+      place-items: center;
+      padding: 10px 18px;
+      flex: 0 0 auto;
+    }
+
+    .unico-wordmark {
+      position: relative;
+      display: inline-flex;
+      align-items: flex-end;
+      gap: 7px;
+      color: #111;
+      font-weight: 900;
+      font-size: 31px;
+      line-height: .85;
+      letter-spacing: .02em;
+      font-style: italic;
+      white-space: nowrap;
+    }
+
+    .unico-chevron {
+      color: var(--brand);
+      font-size: 34px;
+      line-height: .72;
+      transform: skewX(-12deg);
+    }
+
+    .unico-group {
+      position: absolute;
+      right: 0;
+      bottom: -12px;
+      color: var(--brand);
+      font-size: 9px;
+      font-weight: 900;
+      letter-spacing: .03em;
+      font-style: italic;
+    }
+
+    .topbar-title {
+      min-height: 32px;
+      display: inline-flex;
+      align-items: center;
+      padding-left: 22px;
+      border-left: 1px solid rgba(255,255,255,.26);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: .02em;
+      text-transform: uppercase;
+      white-space: nowrap;
     }
 
     .top-actions {
@@ -320,6 +381,18 @@
       gap: 10px;
       flex-wrap: wrap;
       justify-content: flex-end;
+    }
+
+    .topbar .btn,
+    .topbar .pill {
+      border-color: rgba(255,255,255,.25);
+      background: #191919;
+      color: #fff;
+    }
+
+    .topbar .btn.primary {
+      background: var(--brand);
+      border-color: var(--brand);
     }
 
     .main {
@@ -1589,30 +1662,56 @@
       .topbar {
         height: auto;
         position: static;
-        align-items: stretch;
         display: grid;
         gap: 12px;
-        padding-top: 14px;
-        padding-bottom: 14px;
+        padding: 0 14px 14px 0;
       }
 
       .header-brand {
         width: 100%;
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0;
+        align-items: stretch;
+      }
+
+      .top-logo-card {
+        width: min(220px, 48vw);
+        min-height: 68px;
+        padding: 10px 12px;
+      }
+
+      .unico-wordmark {
+        font-size: clamp(22px, 6vw, 29px);
+      }
+
+      .unico-chevron {
+        font-size: clamp(25px, 6vw, 32px);
+      }
+
+      .topbar-title {
+        min-height: 68px;
+        padding: 0 12px;
+        justify-content: center;
+        font-size: clamp(11px, 2.8vw, 14px);
+        white-space: normal;
+        text-align: center;
       }
 
       .crumb {
         line-height: 1.35;
+        display: none;
       }
 
-      .top-actions {
+      .topbar .top-actions {
         width: 100%;
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
         gap: 8px;
       }
 
-      .top-actions .btn,
-      .top-actions .pill {
+      .topbar .top-actions .btn,
+      .topbar .top-actions .pill {
         width: 100%;
         min-height: 42px;
       }
@@ -1647,14 +1746,14 @@
       }
 
       .topbar {
-        padding: 12px 14px;
+        padding: 0 10px 12px 0;
       }
 
-      .top-actions {
+      .topbar .top-actions {
         grid-template-columns: repeat(3, minmax(0, 1fr));
       }
 
-      .top-actions .pill {
+      .topbar .top-actions .pill {
         grid-column: 1 / -1;
       }
 
@@ -1666,6 +1765,15 @@
       .btn {
         padding-left: 10px;
         padding-right: 10px;
+      }
+
+      .top-logo-card {
+        width: 46vw;
+        min-height: 62px;
+      }
+
+      .topbar-title {
+        min-height: 62px;
       }
     }
   </style>
@@ -1709,7 +1817,10 @@
     <div class="content">
       <header class="topbar">
         <div class="header-brand">
-          <img class="header-logo" src="/logo-normal.webp" alt="UNICO Logistica">
+          <div class="top-logo-card" aria-label="UNICO Group">
+            <span class="unico-wordmark"><span class="unico-chevron">›</span>ÚNICO<span class="unico-group">GROUP</span></span>
+          </div>
+          <div class="topbar-title">Checklist operacional</div>
           <div class="crumb"><strong>UNICO Logistica LTDA</strong> / Pouso Alegre / Controle operacional</div>
         </div>
         <div class="top-actions">
