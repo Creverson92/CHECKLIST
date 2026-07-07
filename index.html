@@ -1115,6 +1115,28 @@
       margin-top: 2px;
     }
 
+    .photo-review {
+      display: grid;
+      gap: 10px;
+      border: 1px solid var(--line);
+      background: #fff;
+      padding: 10px;
+    }
+
+    .photo-review img {
+      width: 100%;
+      max-height: 360px;
+      object-fit: contain;
+      background: #111;
+      display: block;
+    }
+
+    .photo-review-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
     .publish-status {
       display: grid;
       gap: 8px;
@@ -2219,6 +2241,7 @@
     let mobileAnswers = {};
     let pendingPublishes = [];
     let autoOpenPhotoRequest = null;
+    let pendingPhotoReview = null;
     let publishedChecklists = [];
     let savedRoutes = [];
     let systemUsers = [];
@@ -2331,8 +2354,7 @@
     function setView(id) {
       if (!isAdminUser() && id !== "mobile") id = "mobile";
       if (id === "mobile") {
-        selectedRouteId = null;
-        selectedLocationId = null;
+        resetMobileChecklistState({ clearRoute: true });
       } else if (id === "dashboard" && currentUser) {
         loadPublishedChecklists();
       }
@@ -2429,10 +2451,7 @@
       stopRealtimeSync();
       stopPendingAutoSync();
       document.body.classList.remove("role-admin", "role-app");
-      selectedRouteId = null;
-      selectedLocationId = null;
-      mobileStepIndex = 0;
-      mobileAnswers = {};
+      resetMobileChecklistState({ clearRoute: true });
       pendingPublishes = [];
       byId("loginForm").reset();
       byId("appShell").hidden = true;
@@ -2509,6 +2528,15 @@
       return route?.items || [];
     }
 
+    function resetMobileChecklistState(options = {}) {
+      if (options.clearRoute) selectedRouteId = null;
+      selectedLocationId = null;
+      mobileStepIndex = 0;
+      mobileAnswers = {};
+      pendingPhotoReview = null;
+      autoOpenPhotoRequest = null;
+    }
+
     async function saveCurrentRoute() {
       const draft = currentRouteDraft();
       if (!draft.title.trim()) {
@@ -2542,10 +2570,7 @@
 
       editingRouteId = serverRoute.id;
       editingRouteLocationIds = serverRoute.locationIds || [];
-      selectedRouteId = null;
-      selectedLocationId = null;
-      mobileStepIndex = 0;
-      mobileAnswers = {};
+      resetMobileChecklistState({ clearRoute: true });
       renderRoutePicker();
       renderLocationPicker();
       renderSavedRouteManager();
@@ -2560,10 +2585,7 @@
       byId("routeTitle").value = "";
       byId("routeDescription").value = "";
       routeSummaryOpen = true;
-      selectedRouteId = null;
-      selectedLocationId = null;
-      mobileStepIndex = 0;
-      mobileAnswers = {};
+      resetMobileChecklistState({ clearRoute: true });
       renderAll();
     }
 
@@ -2577,10 +2599,7 @@
       byId("routeTitle").value = route.title || "";
       byId("routeDescription").value = route.description || "";
       routeSummaryOpen = true;
-      selectedRouteId = null;
-      selectedLocationId = null;
-      mobileStepIndex = 0;
-      mobileAnswers = {};
+      resetMobileChecklistState({ clearRoute: true });
       renderAll();
       byId("routeSummaryPanel").scrollIntoView({ behavior: "smooth", block: "start" });
     }
@@ -2704,7 +2723,7 @@
         label.innerHTML = `<input type="checkbox" data-location-id="${location.id}" ${checked ? "checked" : ""}> ${location.name}`;
         label.querySelector("input").addEventListener("change", () => {
           editingRouteLocationIds = [...document.querySelectorAll("#routeLocations input:checked")].map(input => Number(input.dataset.locationId));
-          selectedLocationId = null;
+          resetMobileChecklistState();
           renderRoutePicker();
           renderLocationPicker();
         });
@@ -2808,6 +2827,8 @@
           selectedLocationId = route.locations.length === 1 ? route.locations[0].id : null;
           mobileStepIndex = 0;
           mobileAnswers = {};
+          pendingPhotoReview = null;
+          autoOpenPhotoRequest = null;
           renderRoutePicker();
           renderLocationPicker();
           renderMobileItems();
@@ -2847,6 +2868,8 @@
           selectedLocationId = location.id;
           mobileStepIndex = 0;
           mobileAnswers = {};
+          pendingPhotoReview = null;
+          autoOpenPhotoRequest = null;
           renderRoutePicker();
           renderLocationPicker();
           renderMobileItems();
@@ -3167,11 +3190,17 @@
       const answer = mobileAnswers[item.id] || {};
       const photos = answer[answerKey] || [];
       const captureMode = normalizeCaptureMode(mode);
+      const pendingReview = pendingPhotoReview
+        && pendingPhotoReview.itemId === item.id
+        && pendingPhotoReview.answerKey === answerKey
+        ? pendingPhotoReview
+        : null;
       const wrap = document.createElement("div");
       wrap.className = "media-tools";
       const countText = min > 0
         ? `Fotos registradas: ${photos.length} de ${max}. Minimo obrigatorio: ${min}.`
         : `${title}s registradas: ${photos.length} de ${max}.`;
+      const disableInput = pendingReview || photos.length >= max;
       const cameraButton = captureMode === "camera" || captureMode === "both"
         ? `<label class="photo-drop"><input data-photo-input data-photo-source="camera" type="file" accept="image/*" capture="environment" style="display:none"> Tirar foto ${Math.min(photos.length + 1, max)} de ${max}</label>`
         : "";
@@ -3181,29 +3210,63 @@
 
       wrap.innerHTML = `
         <div class="media-count">${countText}</div>
+        ${pendingReview ? `
+          <div class="photo-review">
+            <img src="${pendingReview.photo.url}" alt="Previa da foto">
+            <div>
+              <strong>Confira a foto antes de salvar</strong>
+              <small>${escapeHtml(photoMeta(pendingReview.photo))}</small>
+            </div>
+            <div class="photo-review-actions">
+              <button class="btn primary" type="button" data-keep-photo>Manter foto</button>
+              <button class="btn danger" type="button" data-discard-photo>${pendingReview.source === "camera" ? "Excluir e tirar outra" : "Excluir foto"}</button>
+            </div>
+          </div>
+        ` : ""}
         ${cameraButton}
         ${galleryButton}
         <ul class="media-list">${photos.map((photo, photoIndex) => `<li>${title} ${photoIndex + 1}: ${escapeHtml(photo.name || "Imagem")}<small>${photoMeta(photo)}</small></li>`).join("")}</ul>
       `;
+      const keepButton = wrap.querySelector("[data-keep-photo]");
+      if (keepButton && pendingReview) {
+        keepButton.addEventListener("click", () => {
+          const current = [...(mobileAnswers[item.id]?.[answerKey] || [])];
+          if (current.length < pendingReview.max) {
+            current.push(pendingReview.photo);
+            mobileAnswers[item.id] = {
+              ...mobileAnswers[item.id],
+              ...(pendingReview.countAsValue ? { value: current.length } : {}),
+              [answerKey]: current
+            };
+          }
+          if (pendingReview.source === "camera" && current.length < pendingReview.max && current.length < pendingReview.min) {
+            autoOpenPhotoRequest = { itemId: item.id, answerKey };
+          }
+          pendingPhotoReview = null;
+          renderMobileItems();
+        });
+      }
+      const discardButton = wrap.querySelector("[data-discard-photo]");
+      if (discardButton && pendingReview) {
+        discardButton.addEventListener("click", () => {
+          if (pendingReview.source === "camera") {
+            autoOpenPhotoRequest = { itemId: item.id, answerKey };
+          }
+          pendingPhotoReview = null;
+          renderMobileItems();
+        });
+      }
       wrap.querySelectorAll("[data-photo-input]").forEach(fileInput => {
-        fileInput.disabled = photos.length >= max;
+        fileInput.disabled = disableInput;
         fileInput.addEventListener("change", async event => {
           const file = event.target.files[0];
           if (!file) return;
           const source = event.target.dataset.photoSource;
-          const current = [...(mobileAnswers[item.id]?.[answerKey] || [])];
-          if (current.length >= max) return;
+          if ((mobileAnswers[item.id]?.[answerKey] || []).length >= max) return;
           try {
-            const photo = await readPhotoFile(file, `${title} ${current.length + 1}`);
-            current.push(photo);
-            mobileAnswers[item.id] = {
-              ...mobileAnswers[item.id],
-              ...(countAsValue ? { value: current.length } : {}),
-              [answerKey]: current
-            };
-            if (source === "camera" && current.length < max && current.length < min) {
-              autoOpenPhotoRequest = { itemId: item.id, answerKey };
-            }
+            const currentCount = (mobileAnswers[item.id]?.[answerKey] || []).length;
+            const photo = await readPhotoFile(file, `${title} ${currentCount + 1}`);
+            pendingPhotoReview = { itemId: item.id, answerKey, countAsValue, source, photo, max, min };
             renderMobileItems();
           } finally {
             event.target.value = "";
@@ -3246,8 +3309,7 @@
           byId("publishModal").classList.add("open");
         });
         target.querySelector("[data-restart-mobile]").addEventListener("click", () => {
-          mobileStepIndex = 0;
-          mobileAnswers = {};
+          resetMobileChecklistState();
           renderMobileItems();
         });
         return;
@@ -3381,6 +3443,9 @@
 
     function mobileAnswerError(item) {
       const answer = mobileAnswers[item.id];
+      if (pendingPhotoReview && pendingPhotoReview.itemId === item.id) {
+        return "Escolha Manter foto ou Excluir foto antes de continuar.";
+      }
       if (item.type === "media") {
         const minPhotos = Number(item.min || 0) || 0;
         const count = (answer?.photos || []).length;
@@ -3680,10 +3745,7 @@
       confirmButton.disabled = false;
       confirmButton.textContent = "Sim, publicar checklist";
       queueChecklistPublish(report);
-      selectedRouteId = null;
-      selectedLocationId = null;
-      mobileStepIndex = 0;
-      mobileAnswers = {};
+      resetMobileChecklistState({ clearRoute: true });
       renderMobileItems();
     }
 
