@@ -215,7 +215,7 @@ const server = http.createServer(async (request, response) => {
     const body = {
       locations: readLocations(),
       routes: readRoutes(),
-      reports: readReports(),
+      reports: isAdminSession(session) ? readReports() : [],
       users: isAdminSession(session) ? allUsers().map(publicUser) : []
     };
     return sendJson(response, 200, body);

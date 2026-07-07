@@ -1970,7 +1970,7 @@
         savedRoutes = result.routes;
         persistSavedRoutes();
       }
-      if (Array.isArray(result.reports)) {
+      if (isAdminUser() && Array.isArray(result.reports)) {
         publishedChecklists = result.reports;
         savePublishedChecklists();
       }
@@ -2209,11 +2209,12 @@
       byId("loginScreen").hidden = true;
       byId("appShell").hidden = false;
       applyAccessControl();
-      await loadLocationsFromServer();
-      await loadSavedRoutesFromServer();
-      await loadPublishedChecklists();
-      await loadSystemUsers();
-      await loadSharedStateFromServer();
+      await Promise.all([loadLocationsFromServer(), loadSavedRoutesFromServer()]);
+      if (isAdminUser()) {
+        loadPublishedChecklists();
+        loadSystemUsers();
+      }
+      loadSharedStateFromServer();
       startRealtimeSync();
       renderAll();
     }
@@ -2232,11 +2233,12 @@
       byId("loginScreen").hidden = true;
       byId("appShell").hidden = false;
       applyAccessControl();
-      await loadLocationsFromServer();
-      await loadSavedRoutesFromServer();
-      await loadPublishedChecklists();
-      await loadSystemUsers();
-      await loadSharedStateFromServer();
+      await Promise.all([loadLocationsFromServer(), loadSavedRoutesFromServer()]);
+      if (isAdminUser()) {
+        loadPublishedChecklists();
+        loadSystemUsers();
+      }
+      loadSharedStateFromServer();
       startRealtimeSync();
       renderAll();
     }
