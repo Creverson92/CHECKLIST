@@ -19,14 +19,14 @@ const sessions = new Map();
 const seedUsers = [
   {
     username: process.env.ADMIN_USER || "Creverson",
-    password: process.env.ADMIN_PASSWORD,
+    password: process.env.ADMIN_PASSWORD || "123456",
     passwordHash: process.env.ADMIN_PASSWORD_HASH,
     role: "admin",
     name: process.env.ADMIN_NAME || "Creverson"
   },
   {
     username: process.env.APP_USER || "Anderson",
-    password: process.env.APP_PASSWORD,
+    password: process.env.APP_PASSWORD || "123456",
     passwordHash: process.env.APP_PASSWORD_HASH,
     role: "app",
     name: process.env.APP_NAME || "Anderson"

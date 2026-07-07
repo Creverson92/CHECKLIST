@@ -1805,16 +1805,6 @@
       { id: 3, name: "Unico Logistica - Filial Sao Paulo", type: "Filial", address: "Av. Brig. Faria Lima, Sao Paulo-SP" }
     ];
 
-    const historyItems = [
-      { id: "1802071277", division: "Sul de Minas", branch: "Pouso Alegre", route: "Recebimento hospitalar", object: "182958", created: "03/07/2026 - 10:42", finished: "03/07/2026 - 10:58", executor: "Unico Group", status: "Execucao finalizada" },
-      { id: "1405817523", division: "Sul de Minas", branch: "Pouso Alegre", route: "Recebimento hospitalar", object: "1035600", created: "03/07/2026 - 10:21", finished: "03/07/2026 - 10:39", executor: "Unico Group", status: "Execucao finalizada" },
-      { id: "40924075", division: "Sao Paulo", branch: "Sao Paulo", route: "Expedicao verallia", object: "166098", created: "03/07/2026 - 10:08", finished: "03/07/2026 - 10:16", executor: "Unico Group", status: "Execucao finalizada" },
-      { id: "1235983524", division: "Sul de Minas", branch: "Pouso Alegre", route: "Recebimento fiscal", object: "377362", created: "03/07/2026 - 09:46", finished: "03/07/2026 - 10:04", executor: "Unico Group", status: "Execucao finalizada" },
-      { id: "1804811580", division: "Sul de Minas", branch: "Extrema", route: "Expedicao hospitalar", object: "EXP 1 FUVS", created: "03/07/2026 - 09:11", finished: "03/07/2026 - 09:34", executor: "Conferente 2", status: "Execucao finalizada" },
-      { id: "1509827083", division: "Sao Paulo", branch: "Sao Paulo", route: "Expedicao verallia", object: "expedicao 5449", created: "02/07/2026 - 18:22", finished: "02/07/2026 - 20:01", executor: "Conferente 2", status: "Execucao finalizada" },
-      { id: "1095444455", division: "Sul de Minas", branch: "Extrema", route: "Recebimento hospitalar", object: "10553", created: "02/07/2026 - 17:04", finished: "02/07/2026 - 17:29", executor: "Unico Group", status: "Execucao finalizada" }
-    ];
-
     const initialItems = [
       {
         id: 101,
@@ -1902,23 +1892,6 @@
       }
     ];
 
-    function readStorageArray(key) {
-      try {
-        const value = JSON.parse(localStorage.getItem(key) || "[]");
-        return Array.isArray(value) ? value : [];
-      } catch {
-        return [];
-      }
-    }
-
-    function savePublishedChecklists() {
-      try {
-        localStorage.setItem("publishedChecklists", JSON.stringify(publishedChecklists));
-      } catch (error) {
-        localStorage.removeItem("publishedChecklists");
-      }
-    }
-
     async function loadPublishedChecklists() {
       const response = await fetch("/api/reports", { cache: "no-store" }).catch(() => null);
       if (!response || !response.ok) return;
@@ -1927,7 +1900,6 @@
       if (!Array.isArray(result.reports)) return;
 
       publishedChecklists = result.reports;
-      savePublishedChecklists();
       renderDashboard();
     }
 
@@ -1938,17 +1910,17 @@
         body: JSON.stringify(report)
       }).catch(() => null);
 
-      if (!response || !response.ok) return;
+      if (!response || !response.ok) return null;
 
       const result = await response.json().catch(() => ({}));
-      if (!result.report) return;
+      if (!result.report) return null;
 
       publishedChecklists = [
         result.report,
         ...publishedChecklists.filter(item => String(item.id) !== String(result.report.id))
       ];
-      savePublishedChecklists();
       renderDashboard();
+      return result.report;
     }
 
     async function loadSharedStateFromServer() {
@@ -1966,13 +1938,9 @@
       lastSyncKey = nextKey;
 
       if (Array.isArray(result.locations)) locations = result.locations;
-      if (Array.isArray(result.routes)) {
-        savedRoutes = result.routes;
-        persistSavedRoutes();
-      }
+      if (Array.isArray(result.routes)) savedRoutes = result.routes;
       if (isAdminUser() && Array.isArray(result.reports)) {
         publishedChecklists = result.reports;
-        savePublishedChecklists();
       }
       if (isAdminUser() && Array.isArray(result.users)) systemUsers = result.users;
 
@@ -2007,13 +1975,23 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(location)
       }).catch(() => null);
-      if (!response || !response.ok) return null;
+      if (!response || !response.ok) {
+        const result = response ? await response.json().catch(() => ({})) : {};
+        window.alert(result.error || "Nao foi possivel salvar a localidade no Render. Tente novamente.");
+        return null;
+      }
       const result = await response.json().catch(() => ({}));
       return result.location || null;
     }
 
     async function deleteLocationFromServer(id) {
-      await fetch(`/api/locations/${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
+      const response = await fetch(`/api/locations/${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => null);
+      if (!response || !response.ok) {
+        const result = response ? await response.json().catch(() => ({})) : {};
+        window.alert(result.error || "Nao foi possivel excluir a localidade no Render. Tente novamente.");
+        return false;
+      }
+      return true;
     }
 
     async function loadSystemUsers() {
@@ -2120,9 +2098,8 @@
     let selectedLocationId = null;
     let mobileStepIndex = 0;
     let mobileAnswers = {};
-    let publishedChecklists = readStorageArray("publishedChecklists");
-    let deletedHistoryIds = readStorageArray("deletedHistoryIds");
-    let savedRoutes = readStorageArray("savedRoutes");
+    let publishedChecklists = [];
+    let savedRoutes = [];
     let systemUsers = [];
     let editingRouteId = null;
     let editingRouteLocationIds = null;
@@ -2265,32 +2242,12 @@
       return chosen.length ? chosen : locations.slice(0, 1);
     }
 
-    function persistSavedRoutes() {
-      localStorage.setItem("savedRoutes", JSON.stringify(savedRoutes));
-    }
-
     async function loadSavedRoutesFromServer() {
       const response = await fetch("/api/routes", { cache: "no-store" }).catch(() => null);
       if (!response || !response.ok) return;
       const result = await response.json().catch(() => ({}));
       if (!Array.isArray(result.routes)) return;
-      const localRoutes = savedRoutes;
-      const serverIds = new Set(result.routes.map(route => String(route.id)));
-      const localOnlyRoutes = localRoutes.filter(route => !serverIds.has(String(route.id)));
-      savedRoutes = [...result.routes, ...localOnlyRoutes];
-      persistSavedRoutes();
-      if (isAdminUser() && localOnlyRoutes.length) {
-        const migrated = await Promise.all(localOnlyRoutes.map(route => saveRouteToServer(route, true)));
-        const migratedRoutes = migrated.filter(Boolean);
-        if (migratedRoutes.length) {
-          const migratedIds = new Set(migratedRoutes.map(route => String(route.id)));
-          savedRoutes = [
-            ...migratedRoutes,
-            ...savedRoutes.filter(route => !migratedIds.has(String(route.id)))
-          ];
-          persistSavedRoutes();
-        }
-      }
+      savedRoutes = result.routes;
       renderRoutePicker();
       renderLocationPicker();
       renderSavedRouteManager();
@@ -2305,7 +2262,7 @@
       }).catch(() => null);
       const result = response ? await response.json().catch(() => ({})) : {};
       if (!response || !response.ok) {
-        if (!quiet) window.alert(result.error || "Roteiro salvo localmente, mas nao foi possivel enviar para o servidor.");
+        if (!quiet) window.alert(result.error || "Nao foi possivel salvar o roteiro no Render. Tente novamente.");
         return null;
       }
       return result.route;
@@ -2358,7 +2315,7 @@
         return;
       }
 
-      const sameTitleIndex = savedRoutes.findIndex(route => route.title.toLowerCase() === draft.title.toLowerCase());
+      const sameTitleIndex = savedRoutes.findIndex(route => String(route.title || "").toLowerCase() === draft.title.toLowerCase());
       const currentIndex = savedRoutes.findIndex(route => route.id === editingRouteId);
       const index = currentIndex >= 0 ? currentIndex : sameTitleIndex;
       const saved = {
@@ -2370,29 +2327,24 @@
         updatedAt: new Date().toISOString()
       };
 
-      if (index >= 0) {
-        savedRoutes[index] = saved;
-      } else {
-        savedRoutes.unshift(saved);
-      }
-
       const serverRoute = await saveRouteToServer(saved);
-      if (serverRoute) {
-        const serverIndex = savedRoutes.findIndex(route => route.id === serverRoute.id);
-        if (serverIndex >= 0) savedRoutes[serverIndex] = serverRoute;
-      }
+      if (!serverRoute) return;
 
-      editingRouteId = saved.id;
-      editingRouteLocationIds = saved.locationIds;
+      savedRoutes = [
+        serverRoute,
+        ...savedRoutes.filter(route => String(route.id) !== String(serverRoute.id))
+      ];
+
+      editingRouteId = serverRoute.id;
+      editingRouteLocationIds = serverRoute.locationIds || [];
       selectedRouteId = null;
       selectedLocationId = null;
       mobileStepIndex = 0;
       mobileAnswers = {};
-      persistSavedRoutes();
       renderRoutePicker();
       renderLocationPicker();
       renderSavedRouteManager();
-      window.alert(`Roteiro "${saved.title}" salvo e disponivel no Aplicativo.`);
+      window.alert(`Roteiro "${serverRoute.title}" salvo no Render e disponivel no Aplicativo.`);
     }
 
     function resetRouteForm() {
@@ -2428,16 +2380,20 @@
       byId("routeSummaryPanel").scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
-    function deleteSavedRoute(id) {
+    async function deleteSavedRoute(id) {
       const route = savedRoutes.find(entry => entry.id === id);
       if (!route) return;
       const confirmed = window.confirm(`Excluir o roteiro "${route.title}"? Esta acao nao remove checklists ja publicados no historico.`);
       if (!confirmed) return;
+      const response = await fetch(`/api/routes/${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => null);
+      if (!response || !response.ok) {
+        const result = response ? await response.json().catch(() => ({})) : {};
+        window.alert(result.error || "Nao foi possivel excluir o roteiro no Render. Tente novamente.");
+        return;
+      }
       savedRoutes = savedRoutes.filter(entry => entry.id !== id);
       if (editingRouteId === id) resetRouteForm();
       selectedRouteId = selectedRouteId === id ? null : selectedRouteId;
-      persistSavedRoutes();
-      fetch(`/api/routes/${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
       renderAll();
     }
 
@@ -2523,8 +2479,8 @@
         remove.className = "btn small danger";
         remove.textContent = "Excluir";
         remove.addEventListener("click", async () => {
-          locations = locations.filter(item => item.id !== location.id);
-          await deleteLocationFromServer(location.id);
+          const removed = await deleteLocationFromServer(location.id);
+          if (!removed) return;
           await loadSharedStateFromServer();
           renderAll();
         });
@@ -2557,8 +2513,7 @@
       if (!summary || !rows) return;
 
       const query = (byId("historySearch")?.value || "").trim().toLowerCase();
-      const availableHistoryItems = historyItems.filter(item => !deletedHistoryIds.includes(item.id));
-      const allHistory = [...publishedChecklists, ...availableHistoryItems];
+      const allHistory = [...publishedChecklists];
       const filtered = allHistory.filter(item => {
         const text = `${item.id} ${item.division} ${item.branch} ${item.route} ${item.object} ${item.executor}`.toLowerCase();
         return text.includes(query);
@@ -3372,7 +3327,7 @@
       byId("scannerModal").classList.remove("open");
     }
 
-    function publishChecklist() {
+    async function publishChecklist() {
       const confirmButton = byId("confirmPublish");
       confirmButton.disabled = true;
       confirmButton.textContent = "Publicando...";
@@ -3407,46 +3362,56 @@
       mobileStepIndex = routeItems.length;
       byId("mobileItems").innerHTML = `
         <article class="answer-card">
+          <h3>Enviando checklist</h3>
+          <p>Salvando as respostas e imagens no Render. Aguarde a confirmacao antes de sair desta tela.</p>
+        </article>
+      `;
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const savedReport = await saveReportToServer(report);
+      confirmButton.disabled = false;
+      confirmButton.textContent = "Sim, publicar checklist";
+
+      if (!savedReport) {
+        byId("mobileItems").innerHTML = `
+          <article class="answer-card">
+            <h3>Nao foi possivel publicar</h3>
+            <p>O checklist nao foi salvo no Render. Confira a conexao e tente publicar novamente.</p>
+            <button class="btn primary" data-retry-publish>Tentar novamente</button>
+          </article>
+        `;
+        byId("mobileItems").querySelector("[data-retry-publish]").addEventListener("click", () => byId("publishModal").classList.add("open"));
+        return;
+      }
+
+      byId("mobileItems").innerHTML = `
+        <article class="answer-card">
           <h3>Checklist publicado</h3>
-          <p>Publicacao iniciada com sucesso. As fotos estao sendo enviadas em alta qualidade para o historico.</p>
+          <p>Checklist salvo no Render com sucesso e disponivel no historico.</p>
           <button class="btn primary" data-go-history>Ver historico</button>
         </article>
       `;
       byId("mobileItems").querySelector("[data-go-history]").addEventListener("click", () => setView("dashboard"));
-
-      setTimeout(() => {
-        publishedChecklists.unshift(report);
-        savePublishedChecklists();
-        renderDashboard();
-        saveReportToServer(report).finally(() => {
-          confirmButton.disabled = false;
-          confirmButton.textContent = "Sim, publicar checklist";
-        });
-      }, 50);
     }
 
     function findReport(id) {
-      return [...publishedChecklists, ...historyItems.filter(item => !deletedHistoryIds.includes(item.id))].find(item => item.id === id);
+      return publishedChecklists.find(item => String(item.id) === String(id));
     }
 
-    function deleteReport(id) {
+    async function deleteReport(id) {
       const report = findReport(id);
       if (!report) return;
       const confirmed = window.confirm(`Tem certeza que deseja excluir o checklist ${report.id}? Esta acao nao pode ser desfeita.`);
       if (!confirmed) return;
 
-      const publishedCount = publishedChecklists.length;
-      publishedChecklists = publishedChecklists.filter(item => item.id !== id);
-      if (publishedChecklists.length !== publishedCount) {
-        savePublishedChecklists();
-        fetch(`/api/reports/${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
-      }
-      const historyIndex = historyItems.findIndex(item => item.id === id);
-      if (historyIndex >= 0 && !deletedHistoryIds.includes(id)) {
-        deletedHistoryIds.push(id);
-        localStorage.setItem("deletedHistoryIds", JSON.stringify(deletedHistoryIds));
+      const response = await fetch(`/api/reports/${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => null);
+      if (!response || !response.ok) {
+        const result = response ? await response.json().catch(() => ({})) : {};
+        window.alert(result.error || "Nao foi possivel excluir o checklist no Render. Tente novamente.");
+        return;
       }
 
+      publishedChecklists = publishedChecklists.filter(item => item.id !== id);
       byId("reportModal").classList.remove("open");
       renderDashboard();
     }
@@ -3675,8 +3640,8 @@
         type: byId("locationType").value,
         address: byId("locationAddress").value.trim()
       };
-      locations.push(location);
-      await saveLocationToServer(location);
+      const serverLocation = await saveLocationToServer(location);
+      if (!serverLocation) return;
       await loadSharedStateFromServer();
       byId("locationName").value = "";
       byId("locationAddress").value = "";
