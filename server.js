@@ -9,6 +9,7 @@ const dataDir = process.env.DATA_DIR || path.join(__dirname, "data");
 const reportsPath = path.join(dataDir, "reports.json");
 const usersPath = path.join(dataDir, "users.json");
 const routesPath = path.join(dataDir, "routes.json");
+const locationsPath = path.join(dataDir, "locations.json");
 const publicFiles = {
   "/manifest.json": { path: path.join(__dirname, "manifest.json"), type: "application/manifest+json" },
   "/icon.svg": { path: path.join(__dirname, "icon.svg"), type: "image/svg+xml" }
@@ -30,6 +31,12 @@ const seedUsers = [
     role: "app",
     name: process.env.APP_NAME || "Anderson"
   }
+];
+
+const seedLocations = [
+  { id: 1, name: "Unico Logistica - Matriz", type: "Matriz", address: "Rodovia Fernao Dias, Pouso Alegre-MG" },
+  { id: 2, name: "Unico Logistica - Filial Pouso Alegre", type: "Filial", address: "Rod. JK BR 459, Pouso Alegre-MG" },
+  { id: 3, name: "Unico Logistica - Filial Sao Paulo", type: "Filial", address: "Av. Brig. Faria Lima, Sao Paulo-SP" }
 ];
 
 function sendJson(response, status, body, headers = {}) {
@@ -150,6 +157,20 @@ function writeRoutes(routes) {
   fs.writeFileSync(routesPath, JSON.stringify(routes, null, 2));
 }
 
+function readLocations() {
+  try {
+    const locations = JSON.parse(fs.readFileSync(locationsPath, "utf8"));
+    return Array.isArray(locations) ? locations : seedLocations;
+  } catch (error) {
+    return seedLocations;
+  }
+}
+
+function writeLocations(locations) {
+  fs.mkdirSync(dataDir, { recursive: true });
+  fs.writeFileSync(locationsPath, JSON.stringify(locations, null, 2));
+}
+
 const server = http.createServer(async (request, response) => {
   const requestUrl = new URL(request.url, "http://localhost");
   const pathname = requestUrl.pathname;
@@ -185,6 +206,54 @@ const server = http.createServer(async (request, response) => {
 
   if (request.method === "GET" && pathname === "/api/session") {
     return sendJson(response, 200, { user: currentSession(request) });
+  }
+
+  if (pathname === "/api/sync") {
+    const session = currentSession(request);
+    if (!session) return sendJson(response, 401, { error: "Sessao expirada." });
+
+    const body = {
+      locations: readLocations(),
+      routes: readRoutes(),
+      reports: readReports(),
+      users: isAdminSession(session) ? allUsers().map(publicUser) : []
+    };
+    return sendJson(response, 200, body);
+  }
+
+  if (pathname === "/api/locations") {
+    const session = currentSession(request);
+    if (!session) return sendJson(response, 401, { error: "Sessao expirada." });
+
+    if (request.method === "GET") {
+      return sendJson(response, 200, { locations: readLocations() });
+    }
+
+    if (request.method === "POST") {
+      if (!isAdminSession(session)) return sendJson(response, 403, { error: "Acesso negado." });
+      const payload = await readJsonBody(request);
+      const location = {
+        id: Number(payload?.id || Date.now()),
+        name: String(payload?.name || "").trim(),
+        type: String(payload?.type || "Filial").trim(),
+        address: String(payload?.address || "").trim()
+      };
+      if (!location.name) return sendJson(response, 400, { error: "Informe o nome da localidade." });
+
+      const locations = readLocations().filter(item => Number(item.id) !== Number(location.id));
+      locations.push(location);
+      writeLocations(locations);
+      return sendJson(response, 200, { location });
+    }
+  }
+
+  if (request.method === "DELETE" && pathname.startsWith("/api/locations/")) {
+    const session = currentSession(request);
+    if (!isAdminSession(session)) return sendJson(response, 403, { error: "Acesso negado." });
+
+    const id = Number(decodeURIComponent(pathname.replace("/api/locations/", "")));
+    writeLocations(readLocations().filter(location => Number(location.id) !== id));
+    return sendJson(response, 200, { ok: true });
   }
 
   if (pathname === "/api/routes") {

@@ -1951,6 +1951,71 @@
       renderDashboard();
     }
 
+    async function loadSharedStateFromServer() {
+      if (!currentUser) return;
+      const response = await fetch("/api/sync", { cache: "no-store" }).catch(() => null);
+      if (!response || !response.ok) return;
+      const result = await response.json().catch(() => ({}));
+      const nextKey = JSON.stringify({
+        locations: result.locations || [],
+        routes: result.routes || [],
+        reports: result.reports || [],
+        users: result.users || []
+      });
+      if (nextKey === lastSyncKey) return;
+      lastSyncKey = nextKey;
+
+      if (Array.isArray(result.locations)) locations = result.locations;
+      if (Array.isArray(result.routes)) {
+        savedRoutes = result.routes;
+        persistSavedRoutes();
+      }
+      if (Array.isArray(result.reports)) {
+        publishedChecklists = result.reports;
+        savePublishedChecklists();
+      }
+      if (isAdminUser() && Array.isArray(result.users)) systemUsers = result.users;
+
+      renderAll();
+    }
+
+    function startRealtimeSync() {
+      if (syncTimer) clearInterval(syncTimer);
+      syncTimer = setInterval(loadSharedStateFromServer, 5000);
+    }
+
+    function stopRealtimeSync() {
+      if (syncTimer) clearInterval(syncTimer);
+      syncTimer = null;
+      lastSyncKey = "";
+    }
+
+    async function loadLocationsFromServer() {
+      const response = await fetch("/api/locations", { cache: "no-store" }).catch(() => null);
+      if (!response || !response.ok) return;
+      const result = await response.json().catch(() => ({}));
+      if (!Array.isArray(result.locations)) return;
+      locations = result.locations;
+      renderLocations();
+      renderRoutePicker();
+      renderLocationPicker();
+    }
+
+    async function saveLocationToServer(location) {
+      const response = await fetch("/api/locations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(location)
+      }).catch(() => null);
+      if (!response || !response.ok) return null;
+      const result = await response.json().catch(() => ({}));
+      return result.location || null;
+    }
+
+    async function deleteLocationFromServer(id) {
+      await fetch(`/api/locations/${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
+    }
+
     async function loadSystemUsers() {
       if (!isAdminUser()) return;
       const response = await fetch("/api/users", { cache: "no-store" }).catch(() => null);
@@ -2061,6 +2126,8 @@
     let systemUsers = [];
     let editingRouteId = null;
     let editingRouteLocationIds = null;
+    let syncTimer = null;
+    let lastSyncKey = "";
     let scannerStream = null;
     let scannerTimer = null;
     let scannerTargetItemId = null;
@@ -2142,9 +2209,12 @@
       byId("loginScreen").hidden = true;
       byId("appShell").hidden = false;
       applyAccessControl();
+      await loadLocationsFromServer();
       await loadSavedRoutesFromServer();
       await loadPublishedChecklists();
       await loadSystemUsers();
+      await loadSharedStateFromServer();
+      startRealtimeSync();
       renderAll();
     }
 
@@ -2162,15 +2232,19 @@
       byId("loginScreen").hidden = true;
       byId("appShell").hidden = false;
       applyAccessControl();
+      await loadLocationsFromServer();
       await loadSavedRoutesFromServer();
       await loadPublishedChecklists();
       await loadSystemUsers();
+      await loadSharedStateFromServer();
+      startRealtimeSync();
       renderAll();
     }
 
     async function logout() {
       await fetch("/api/logout", { method: "POST" }).catch(() => {});
       currentUser = null;
+      stopRealtimeSync();
       document.body.classList.remove("role-admin", "role-app");
       selectedRouteId = null;
       selectedLocationId = null;
@@ -2204,7 +2278,16 @@
       savedRoutes = [...result.routes, ...localOnlyRoutes];
       persistSavedRoutes();
       if (isAdminUser() && localOnlyRoutes.length) {
-        localOnlyRoutes.forEach(route => saveRouteToServer(route, true));
+        const migrated = await Promise.all(localOnlyRoutes.map(route => saveRouteToServer(route, true)));
+        const migratedRoutes = migrated.filter(Boolean);
+        if (migratedRoutes.length) {
+          const migratedIds = new Set(migratedRoutes.map(route => String(route.id)));
+          savedRoutes = [
+            ...migratedRoutes,
+            ...savedRoutes.filter(route => !migratedIds.has(String(route.id)))
+          ];
+          persistSavedRoutes();
+        }
       }
       renderRoutePicker();
       renderLocationPicker();
@@ -2437,8 +2520,10 @@
         const remove = document.createElement("button");
         remove.className = "btn small danger";
         remove.textContent = "Excluir";
-        remove.addEventListener("click", () => {
+        remove.addEventListener("click", async () => {
           locations = locations.filter(item => item.id !== location.id);
+          await deleteLocationFromServer(location.id);
+          await loadSharedStateFromServer();
           renderAll();
         });
         row.append(remove);
@@ -3579,15 +3664,18 @@
       renderRouteSummary();
     });
 
-    byId("addLocation").addEventListener("click", () => {
+    byId("addLocation").addEventListener("click", async () => {
       const name = byId("locationName").value.trim();
       if (!name) return;
-      locations.push({
+      const location = {
         id: Date.now(),
         name,
         type: byId("locationType").value,
         address: byId("locationAddress").value.trim()
-      });
+      };
+      locations.push(location);
+      await saveLocationToServer(location);
+      await loadSharedStateFromServer();
       byId("locationName").value = "";
       byId("locationAddress").value = "";
       renderAll();
