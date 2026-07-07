@@ -2142,6 +2142,7 @@
       byId("loginScreen").hidden = true;
       byId("appShell").hidden = false;
       applyAccessControl();
+      await loadSavedRoutesFromServer();
       await loadPublishedChecklists();
       await loadSystemUsers();
       renderAll();
@@ -2161,6 +2162,7 @@
       byId("loginScreen").hidden = true;
       byId("appShell").hidden = false;
       applyAccessControl();
+      await loadSavedRoutesFromServer();
       await loadPublishedChecklists();
       await loadSystemUsers();
       renderAll();
@@ -2189,6 +2191,39 @@
 
     function persistSavedRoutes() {
       localStorage.setItem("savedRoutes", JSON.stringify(savedRoutes));
+    }
+
+    async function loadSavedRoutesFromServer() {
+      const response = await fetch("/api/routes", { cache: "no-store" }).catch(() => null);
+      if (!response || !response.ok) return;
+      const result = await response.json().catch(() => ({}));
+      if (!Array.isArray(result.routes)) return;
+      const localRoutes = savedRoutes;
+      const serverIds = new Set(result.routes.map(route => String(route.id)));
+      const localOnlyRoutes = localRoutes.filter(route => !serverIds.has(String(route.id)));
+      savedRoutes = [...result.routes, ...localOnlyRoutes];
+      persistSavedRoutes();
+      if (isAdminUser() && localOnlyRoutes.length) {
+        localOnlyRoutes.forEach(route => saveRouteToServer(route, true));
+      }
+      renderRoutePicker();
+      renderLocationPicker();
+      renderSavedRouteManager();
+      renderMobileItems();
+    }
+
+    async function saveRouteToServer(route, quiet = false) {
+      const response = await fetch("/api/routes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(route)
+      }).catch(() => null);
+      const result = response ? await response.json().catch(() => ({})) : {};
+      if (!response || !response.ok) {
+        if (!quiet) window.alert(result.error || "Roteiro salvo localmente, mas nao foi possivel enviar para o servidor.");
+        return null;
+      }
+      return result.route;
     }
 
     function clone(value) {
@@ -2227,7 +2262,7 @@
       return route?.items || [];
     }
 
-    function saveCurrentRoute() {
+    async function saveCurrentRoute() {
       const draft = currentRouteDraft();
       if (!draft.title.trim()) {
         window.alert("Informe um titulo para salvar o roteiro.");
@@ -2255,6 +2290,13 @@
       } else {
         savedRoutes.unshift(saved);
       }
+
+      const serverRoute = await saveRouteToServer(saved);
+      if (serverRoute) {
+        const serverIndex = savedRoutes.findIndex(route => route.id === serverRoute.id);
+        if (serverIndex >= 0) savedRoutes[serverIndex] = serverRoute;
+      }
+
       editingRouteId = saved.id;
       editingRouteLocationIds = saved.locationIds;
       selectedRouteId = null;
@@ -2310,6 +2352,7 @@
       if (editingRouteId === id) resetRouteForm();
       selectedRouteId = selectedRouteId === id ? null : selectedRouteId;
       persistSavedRoutes();
+      fetch(`/api/routes/${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
       renderAll();
     }
 

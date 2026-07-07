@@ -8,6 +8,7 @@ const indexPath = path.join(__dirname, "index.html");
 const dataDir = process.env.DATA_DIR || path.join(__dirname, "data");
 const reportsPath = path.join(dataDir, "reports.json");
 const usersPath = path.join(dataDir, "users.json");
+const routesPath = path.join(dataDir, "routes.json");
 const publicFiles = {
   "/manifest.json": { path: path.join(__dirname, "manifest.json"), type: "application/manifest+json" },
   "/icon.svg": { path: path.join(__dirname, "icon.svg"), type: "image/svg+xml" }
@@ -135,6 +136,20 @@ function writeReports(reports) {
   fs.writeFileSync(reportsPath, JSON.stringify(reports, null, 2));
 }
 
+function readRoutes() {
+  try {
+    const routes = JSON.parse(fs.readFileSync(routesPath, "utf8"));
+    return Array.isArray(routes) ? routes : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function writeRoutes(routes) {
+  fs.mkdirSync(dataDir, { recursive: true });
+  fs.writeFileSync(routesPath, JSON.stringify(routes, null, 2));
+}
+
 const server = http.createServer(async (request, response) => {
   const requestUrl = new URL(request.url, "http://localhost");
   const pathname = requestUrl.pathname;
@@ -170,6 +185,43 @@ const server = http.createServer(async (request, response) => {
 
   if (request.method === "GET" && pathname === "/api/session") {
     return sendJson(response, 200, { user: currentSession(request) });
+  }
+
+  if (pathname === "/api/routes") {
+    const session = currentSession(request);
+    if (!session) return sendJson(response, 401, { error: "Sessao expirada." });
+
+    if (request.method === "GET") {
+      return sendJson(response, 200, { routes: readRoutes() });
+    }
+
+    if (request.method === "POST") {
+      if (!isAdminSession(session)) return sendJson(response, 403, { error: "Acesso negado." });
+      const payload = await readJsonBody(request);
+      if (!payload || typeof payload !== "object") return sendJson(response, 400, { error: "Roteiro invalido." });
+
+      const route = {
+        ...payload,
+        id: String(payload.id || `route-${Date.now()}`),
+        title: String(payload.title || "").trim(),
+        updatedAt: new Date().toISOString()
+      };
+      if (!route.title) return sendJson(response, 400, { error: "Informe o titulo do roteiro." });
+
+      const routes = readRoutes().filter(item => String(item.id) !== route.id);
+      routes.unshift(route);
+      writeRoutes(routes);
+      return sendJson(response, 200, { route });
+    }
+  }
+
+  if (request.method === "DELETE" && pathname.startsWith("/api/routes/")) {
+    const session = currentSession(request);
+    if (!isAdminSession(session)) return sendJson(response, 403, { error: "Acesso negado." });
+
+    const id = decodeURIComponent(pathname.replace("/api/routes/", ""));
+    writeRoutes(readRoutes().filter(route => String(route.id) !== id));
+    return sendJson(response, 200, { ok: true });
   }
 
   if (pathname === "/api/users") {
