@@ -221,6 +221,18 @@
       letter-spacing: .04em;
     }
 
+    .brand-logo {
+      width: 172px;
+      max-width: 100%;
+      height: auto;
+      display: block;
+      object-fit: contain;
+    }
+
+    .login-card .brand-logo {
+      width: 205px;
+    }
+
     .brand strong {
       display: block;
       font-size: 18px;
@@ -289,6 +301,22 @@
 
     .crumb strong {
       color: var(--brand-dark);
+    }
+
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .header-logo {
+      width: 160px;
+      height: auto;
+      display: block;
+      flex: 0 0 auto;
+      background: #050505;
+      padding: 4px 6px;
     }
 
     .top-actions {
@@ -954,6 +982,22 @@
       padding: 14px;
     }
 
+    .mobile-picker-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .mobile-header-logo {
+      width: 136px;
+      height: auto;
+      display: block;
+      background: #050505;
+      padding: 3px 5px;
+      flex: 0 0 auto;
+    }
+
     .phone-top strong {
       display: block;
       font-size: 17px;
@@ -1069,6 +1113,53 @@
       display: block;
       color: var(--muted);
       margin-top: 2px;
+    }
+
+    .publish-status {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .publish-status:empty {
+      display: none;
+    }
+
+    .publish-status-card {
+      border: 1px solid var(--line);
+      background: #fff;
+      padding: 11px 12px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .publish-status-card strong {
+      display: block;
+      color: var(--navy);
+      font-size: 13px;
+      margin-bottom: 3px;
+    }
+
+    .publish-status-card[data-status="done"] {
+      border-color: rgba(43, 154, 102, .35);
+      background: #f1fbf6;
+    }
+
+    .publish-status-card[data-status="pending"] {
+      border-color: rgba(211, 138, 35, .38);
+      background: #fff9ed;
+    }
+
+    .publish-status-card[data-status="error"] {
+      border-color: rgba(213, 82, 74, .35);
+      background: #fff5f4;
+    }
+
+    .publish-status-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
     }
 
     .scanner-panel {
@@ -1224,6 +1315,14 @@
       display: flex;
       align-items: center;
       gap: 14px;
+    }
+
+    .report-brand-logo {
+      width: 178px;
+      height: auto;
+      display: block;
+      background: #050505;
+      padding: 4px 6px;
     }
 
     .report-brand-mark {
@@ -1492,11 +1591,7 @@
   <section class="login-screen" id="loginScreen">
     <form class="login-card" id="loginForm">
       <div class="brand">
-        <div class="brand-mark">U</div>
-        <div>
-          <strong>UNICO</strong>
-          <span>Checklist Logistica</span>
-        </div>
+        <img class="brand-logo" src="/logo-normal.webp" alt="UNICO Logistica">
       </div>
       <h1>Acessar sistema</h1>
       <p class="lead">Informe seu usuario e senha para continuar.</p>
@@ -1517,23 +1612,23 @@
   <div class="app-shell" id="appShell" hidden>
     <aside class="sidebar">
       <div class="brand">
-        <div class="brand-mark">U</div>
-        <div>
-          <strong>UNICO</strong>
-          <span>Checklist Logistica</span>
-        </div>
+        <img class="brand-logo" src="/logo-normal.webp" alt="UNICO Logistica">
       </div>
       <nav class="nav" aria-label="Navegacao principal">
         <button class="nav-button active" data-view="dashboard"><span class="nav-icon">01</span>Inicio</button>
         <button class="nav-button" data-view="locations"><span class="nav-icon">02</span>Localidades</button>
         <button class="nav-button" data-view="builder"><span class="nav-icon">03</span>Roteiros</button>
         <button class="nav-button" data-view="mobile"><span class="nav-icon">04</span>Aplicativo</button>
+        <button class="nav-button" data-view="users"><span class="nav-icon">05</span>Usuarios</button>
       </nav>
     </aside>
 
     <div class="content">
       <header class="topbar">
-        <div class="crumb"><strong>UNICO Logistica LTDA</strong> / Pouso Alegre / Controle operacional</div>
+        <div class="header-brand">
+          <img class="header-logo" src="/logo-normal.webp" alt="UNICO Logistica">
+          <div class="crumb"><strong>UNICO Logistica LTDA</strong> / Pouso Alegre / Controle operacional</div>
+        </div>
         <div class="top-actions">
           <span class="pill" id="userBadge">Usuario</span>
           <button class="btn" data-view-trigger="locations">Administrar locais</button>
@@ -1553,33 +1648,6 @@
           </div>
 
           <div class="branch-summary" id="branchSummary"></div>
-
-          <section class="panel user-admin-panel">
-            <div class="panel-header">
-              <h2>Usuarios do sistema</h2>
-            </div>
-            <div class="panel-body">
-              <div class="form-row">
-                <div class="field">
-                  <label for="userFullName">Nome</label>
-                  <input id="userFullName" placeholder="Ex.: Anderson">
-                </div>
-                <div class="field">
-                  <label for="userLoginName">Usuario</label>
-                  <input id="userLoginName" placeholder="Ex.: anderson">
-                </div>
-                <div class="field">
-                  <label for="userPassword">Senha</label>
-                  <input id="userPassword" type="password" placeholder="Deixe em branco para manter">
-                </div>
-              </div>
-              <div class="top-actions" style="justify-content:space-between;margin-top:10px;">
-                <label class="toggle"><input type="checkbox" id="userIsAdmin"> Usuario administrador</label>
-                <button class="btn primary" id="saveUser">Salvar usuario</button>
-              </div>
-              <div id="usersList" class="route-admin-list" style="margin-top:14px;"></div>
-            </div>
-          </section>
 
           <div class="history-toolbar">
             <h2>Historico por filial</h2>
@@ -1709,10 +1777,14 @@
         <section class="view" id="mobile">
           <section class="panel route-picker" id="routePicker">
             <div class="panel-header">
-              <h2>Escolher roteiro</h2>
+              <div class="mobile-picker-title">
+                <img class="mobile-header-logo" src="/logo-normal.webp" alt="UNICO Logistica">
+                <h2>Escolher roteiro</h2>
+              </div>
               <button class="btn small mobile-logout" type="button" data-mobile-logout>Sair</button>
             </div>
             <div class="panel-body">
+              <div id="publishStatus" class="publish-status"></div>
               <div class="route-picker-grid" id="routePickerGrid"></div>
             </div>
           </section>
@@ -1729,6 +1801,42 @@
             </div>
             <div class="phone-body" id="mobileItems"></div>
           </div>
+        </section>
+
+        <section class="view" id="users">
+          <div class="page-title">
+            <div>
+              <h1>Usuarios</h1>
+              <p class="lead">Cadastre operadores e defina quem tem acesso administrativo ao sistema.</p>
+            </div>
+          </div>
+
+          <section class="panel user-admin-panel">
+            <div class="panel-header">
+              <h2>Usuarios do sistema</h2>
+            </div>
+            <div class="panel-body">
+              <div class="form-row">
+                <div class="field">
+                  <label for="userFullName">Nome</label>
+                  <input id="userFullName" placeholder="Ex.: Anderson">
+                </div>
+                <div class="field">
+                  <label for="userLoginName">Usuario</label>
+                  <input id="userLoginName" placeholder="Ex.: anderson">
+                </div>
+                <div class="field">
+                  <label for="userPassword">Senha</label>
+                  <input id="userPassword" type="password" placeholder="Deixe em branco para manter">
+                </div>
+              </div>
+              <div class="top-actions" style="justify-content:space-between;margin-top:10px;">
+                <label class="toggle"><input type="checkbox" id="userIsAdmin"> Usuario administrador</label>
+                <button class="btn primary" id="saveUser">Salvar usuario</button>
+              </div>
+              <div id="usersList" class="route-admin-list" style="margin-top:14px;"></div>
+            </div>
+          </section>
         </section>
       </main>
     </div>
@@ -1958,6 +2066,17 @@
       lastSyncKey = "";
     }
 
+    function startPendingAutoSync() {
+      stopPendingAutoSync();
+      pendingSyncTimer = setInterval(syncAllPendingPublishes, pendingSyncIntervalMs);
+      if (navigator.onLine !== false) setTimeout(syncAllPendingPublishes, 2500);
+    }
+
+    function stopPendingAutoSync() {
+      if (pendingSyncTimer) clearInterval(pendingSyncTimer);
+      pendingSyncTimer = null;
+    }
+
     async function loadLocationsFromServer() {
       const response = await fetch("/api/locations", { cache: "no-store" }).catch(() => null);
       if (!response || !response.ok) return;
@@ -2098,12 +2217,15 @@
     let selectedLocationId = null;
     let mobileStepIndex = 0;
     let mobileAnswers = {};
+    let pendingPublishes = [];
+    let autoOpenPhotoRequest = null;
     let publishedChecklists = [];
     let savedRoutes = [];
     let systemUsers = [];
     let editingRouteId = null;
     let editingRouteLocationIds = null;
     let syncTimer = null;
+    let pendingSyncTimer = null;
     let lastSyncKey = "";
     let scannerStream = null;
     let scannerTimer = null;
@@ -2115,6 +2237,8 @@
     const triggers = document.querySelectorAll("[data-view-trigger]");
     const modal = document.getElementById("typeModal");
     const typeGrid = document.getElementById("typeGrid");
+    const pendingSyncIntervalMs = 20 * 60 * 1000;
+    let pendingDbPromise = null;
 
     function byId(id) {
       return document.getElementById(id);
@@ -2127,6 +2251,81 @@
     function isAdminUser(user = currentUser) {
       const username = (user?.username || user?.name || "").toLowerCase();
       return user?.role === "admin" || username === "creverson";
+    }
+
+    function currentUserKey() {
+      return String(currentUser?.username || currentUser?.name || "usuario").trim().toLowerCase();
+    }
+
+    function openPendingDb() {
+      if (!("indexedDB" in window)) return Promise.resolve(null);
+      if (pendingDbPromise) return pendingDbPromise;
+      pendingDbPromise = new Promise(resolve => {
+        const request = indexedDB.open("unico-checklist-offline", 1);
+        request.onupgradeneeded = event => {
+          const db = event.target.result;
+          if (!db.objectStoreNames.contains("pendingPublishes")) {
+            db.createObjectStore("pendingPublishes", { keyPath: "id" });
+          }
+        };
+        request.onsuccess = event => resolve(event.target.result);
+        request.onerror = () => resolve(null);
+      });
+      return pendingDbPromise;
+    }
+
+    async function readPendingPublishesFromDevice() {
+      const db = await openPendingDb();
+      if (!db) return [];
+      return new Promise(resolve => {
+        const tx = db.transaction("pendingPublishes", "readonly");
+        const request = tx.objectStore("pendingPublishes").getAll();
+        request.onsuccess = () => {
+          const owner = currentUserKey();
+          const entries = (request.result || [])
+            .filter(entry => entry.owner === owner && entry.report)
+            .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+          resolve(entries);
+        };
+        request.onerror = () => resolve([]);
+      });
+    }
+
+    async function persistPendingPublish(entry) {
+      const db = await openPendingDb();
+      if (!db || !entry?.report) return false;
+      return new Promise(resolve => {
+        const tx = db.transaction("pendingPublishes", "readwrite");
+        tx.objectStore("pendingPublishes").put({
+          ...entry,
+          owner: entry.owner || currentUserKey(),
+          updatedAt: new Date().toISOString()
+        });
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      });
+    }
+
+    async function removePendingPublishFromDevice(id) {
+      const db = await openPendingDb();
+      if (!db) return false;
+      return new Promise(resolve => {
+        const tx = db.transaction("pendingPublishes", "readwrite");
+        tx.objectStore("pendingPublishes").delete(id);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      });
+    }
+
+    async function loadPendingPublishes() {
+      pendingPublishes = (await readPendingPublishesFromDevice()).map(entry => ({
+        ...entry,
+        status: entry.status === "sending" ? "pending" : entry.status,
+        message: entry.status === "sending"
+          ? "Pendente de sincronizacao. Toque em Sincronizar ou aguarde a tentativa automatica."
+          : entry.message
+      }));
+      renderPublishStatus();
     }
 
     function setView(id) {
@@ -2187,12 +2386,14 @@
       byId("appShell").hidden = false;
       applyAccessControl();
       await Promise.all([loadLocationsFromServer(), loadSavedRoutesFromServer()]);
+      await loadPendingPublishes();
       if (isAdminUser()) {
         loadPublishedChecklists();
         loadSystemUsers();
       }
       loadSharedStateFromServer();
       startRealtimeSync();
+      startPendingAutoSync();
       renderAll();
     }
 
@@ -2211,12 +2412,14 @@
       byId("appShell").hidden = false;
       applyAccessControl();
       await Promise.all([loadLocationsFromServer(), loadSavedRoutesFromServer()]);
+      await loadPendingPublishes();
       if (isAdminUser()) {
         loadPublishedChecklists();
         loadSystemUsers();
       }
       loadSharedStateFromServer();
       startRealtimeSync();
+      startPendingAutoSync();
       renderAll();
     }
 
@@ -2224,11 +2427,13 @@
       await fetch("/api/logout", { method: "POST" }).catch(() => {});
       currentUser = null;
       stopRealtimeSync();
+      stopPendingAutoSync();
       document.body.classList.remove("role-admin", "role-app");
       selectedRouteId = null;
       selectedLocationId = null;
       mobileStepIndex = 0;
       mobileAnswers = {};
+      pendingPublishes = [];
       byId("loginForm").reset();
       byId("appShell").hidden = true;
       byId("loginScreen").hidden = false;
@@ -2968,10 +3173,10 @@
         ? `Fotos registradas: ${photos.length} de ${max}. Minimo obrigatorio: ${min}.`
         : `${title}s registradas: ${photos.length} de ${max}.`;
       const cameraButton = captureMode === "camera" || captureMode === "both"
-        ? `<label class="photo-drop"><input data-photo-input type="file" accept="image/*" capture="environment" style="display:none"> Tirar foto ${Math.min(photos.length + 1, max)} de ${max}</label>`
+        ? `<label class="photo-drop"><input data-photo-input data-photo-source="camera" type="file" accept="image/*" capture="environment" style="display:none"> Tirar foto ${Math.min(photos.length + 1, max)} de ${max}</label>`
         : "";
       const galleryButton = captureMode === "gallery" || captureMode === "both"
-        ? `<label class="photo-drop"><input data-photo-input type="file" accept="image/*" style="display:none"> Adicionar imagem da galeria</label>`
+        ? `<label class="photo-drop"><input data-photo-input data-photo-source="gallery" type="file" accept="image/*" style="display:none"> Adicionar imagem da galeria</label>`
         : "";
 
       wrap.innerHTML = `
@@ -2985,6 +3190,7 @@
         fileInput.addEventListener("change", async event => {
           const file = event.target.files[0];
           if (!file) return;
+          const source = event.target.dataset.photoSource;
           const current = [...(mobileAnswers[item.id]?.[answerKey] || [])];
           if (current.length >= max) return;
           try {
@@ -2995,6 +3201,9 @@
               ...(countAsValue ? { value: current.length } : {}),
               [answerKey]: current
             };
+            if (source === "camera" && current.length < max && current.length < min) {
+              autoOpenPhotoRequest = { itemId: item.id, answerKey };
+            }
             renderMobileItems();
           } finally {
             event.target.value = "";
@@ -3148,8 +3357,9 @@
       next.className = "btn primary";
       next.textContent = mobileStepIndex === routeItems.length - 1 ? "Finalizar" : "Proxima";
       next.addEventListener("click", () => {
-        if (!isMobileAnswerValid(item)) {
-          warning.textContent = "Preencha esta pergunta obrigatoria antes de continuar.";
+        const error = mobileAnswerError(item);
+        if (error) {
+          warning.textContent = error;
           return;
         }
         mobileStepIndex += 1;
@@ -3159,16 +3369,35 @@
       card.append(body, warning, actions);
       target.append(card);
       setupSignaturePads();
+      const request = autoOpenPhotoRequest;
+      if (request && request.itemId === item.id) {
+        autoOpenPhotoRequest = null;
+        const nextCameraInput = target.querySelector(`[data-photo-input][data-photo-source="camera"]`);
+        if (nextCameraInput && !nextCameraInput.disabled) {
+          setTimeout(() => nextCameraInput.click(), 250);
+        }
+      }
+    }
+
+    function mobileAnswerError(item) {
+      const answer = mobileAnswers[item.id];
+      if (item.type === "media") {
+        const minPhotos = Number(item.min || 0) || 0;
+        const count = (answer?.photos || []).length;
+        if (minPhotos > 0 && count < minPhotos) return `Registre no minimo ${minPhotos} foto${minPhotos > 1 ? "s" : ""} para continuar.`;
+        if (item.required && count < 1) return "Registre ao menos uma foto para continuar.";
+        return "";
+      }
+      if (!item.required) return "";
+      if (!answer || answer.value === undefined || answer.value === null) return "Preencha esta pergunta obrigatoria antes de continuar.";
+      if (Array.isArray(answer.value) && !answer.value.length) return "Selecione ao menos uma opcao para continuar.";
+      if (typeof answer.value === "number" && answer.value <= 0) return "Preencha esta pergunta obrigatoria antes de continuar.";
+      if (!String(answer.value).trim().length) return "Preencha esta pergunta obrigatoria antes de continuar.";
+      return "";
     }
 
     function isMobileAnswerValid(item) {
-      if (!item.required) return true;
-      const answer = mobileAnswers[item.id];
-      if (!answer || answer.value === undefined || answer.value === null) return false;
-      if (item.type === "media") return Number(answer.value || 0) >= Number(item.min || 1);
-      if (Array.isArray(answer.value)) return answer.value.length > 0;
-      if (typeof answer.value === "number") return answer.value > 0;
-      return String(answer.value).trim().length > 0;
+      return !mobileAnswerError(item);
     }
 
     function readPhotoFile(file, fallbackName) {
@@ -3180,7 +3409,8 @@
             name: file.name || fallbackName,
             url: reader.result,
             type: file.type || "image/*",
-            size: file.size || 0
+            size: file.size || 0,
+            quality: "original"
           };
           const image = new Image();
           image.onload = () => {
@@ -3198,7 +3428,8 @@
     function photoMeta(photo) {
       const resolution = photo.width && photo.height ? `${photo.width} x ${photo.height}px` : "resolucao original";
       const size = photo.size ? `${(photo.size / 1024 / 1024).toFixed(1)} MB` : "tamanho original";
-      return `${resolution} - ${size}`;
+      const quality = photo.quality === "original" ? "qualidade original" : "sem redimensionamento";
+      return `${resolution} - ${size} - ${quality}`;
     }
 
     function setupSignaturePads() {
@@ -3327,7 +3558,94 @@
       byId("scannerModal").classList.remove("open");
     }
 
-    async function publishChecklist() {
+    function renderPublishStatus() {
+      const host = byId("publishStatus");
+      if (!host) return;
+      const visible = pendingPublishes.slice(0, 6);
+      if (!visible.length) {
+        host.innerHTML = "";
+        return;
+      }
+      const pendingCount = pendingPublishes.filter(entry => entry.status !== "done").length;
+      host.innerHTML = `
+        <div class="publish-status-actions">
+          <button class="btn small primary" data-sync-all-pending type="button">Sincronizar todos (${pendingCount})</button>
+        </div>
+        ${visible.map(entry => `
+          <div class="publish-status-card" data-status="${entry.status}">
+            <strong>${escapeHtml(entry.title)}</strong>
+            <span>${escapeHtml(entry.message)}</span>
+            <div class="publish-status-actions" style="margin:8px 0 0;">
+              ${entry.status === "sending"
+                ? `<button class="btn small" type="button" disabled>Sincronizando...</button>`
+                : `<button class="btn small" data-sync-publish="${entry.id}" type="button">Sincronizar</button>`}
+            </div>
+          </div>
+        `).join("")}
+      `;
+      host.querySelector("[data-sync-all-pending]")?.addEventListener("click", syncAllPendingPublishes);
+      host.querySelectorAll("[data-sync-publish]").forEach(button => {
+        button.addEventListener("click", () => syncPendingPublish(button.dataset.syncPublish));
+      });
+    }
+
+    async function runBackgroundPublish(entry) {
+      if (!entry?.report || entry.status === "sending") return;
+      entry.status = "sending";
+      entry.message = "Publicando em segundo plano no Render...";
+      entry.lastAttemptAt = new Date().toISOString();
+      renderPublishStatus();
+      await persistPendingPublish(entry);
+      const savedReport = await saveReportToServer(entry.report);
+      if (savedReport) {
+        entry.status = "done";
+        entry.message = "Publicado com sucesso no historico.";
+        await removePendingPublishFromDevice(entry.id);
+        entry.report = null;
+        renderPublishStatus();
+        setTimeout(() => {
+          pendingPublishes = pendingPublishes.filter(item => item.id !== entry.id);
+          renderPublishStatus();
+        }, 18000);
+        return;
+      }
+      entry.status = "pending";
+      entry.message = navigator.onLine === false
+        ? "Pendente de sincronizacao. Sem internet neste aparelho."
+        : "Pendente de sincronizacao. Toque em Sincronizar ou aguarde a tentativa automatica.";
+      await persistPendingPublish(entry);
+      renderPublishStatus();
+    }
+
+    function syncPendingPublish(id) {
+      const entry = pendingPublishes.find(item => item.id === id);
+      if (!entry?.report) return;
+      runBackgroundPublish(entry);
+    }
+
+    function syncAllPendingPublishes() {
+      if (!currentUser || !pendingPublishes.length) return;
+      pendingPublishes
+        .filter(entry => entry.report && entry.status !== "sending" && entry.status !== "done")
+        .forEach(entry => runBackgroundPublish(entry));
+    }
+
+    function queueChecklistPublish(report) {
+      const entry = {
+        id: report.id,
+        title: `${report.route} - ${report.branch}`,
+        owner: currentUserKey(),
+        status: "pending",
+        message: "Pendente de sincronizacao. Preparando envio para o Render.",
+        createdAt: new Date().toISOString(),
+        report
+      };
+      pendingPublishes.unshift(entry);
+      renderPublishStatus();
+      persistPendingPublish(entry).finally(() => setTimeout(() => runBackgroundPublish(entry), 80));
+    }
+
+    function publishChecklist() {
       const confirmButton = byId("confirmPublish");
       confirmButton.disabled = true;
       confirmButton.textContent = "Publicando...";
@@ -3359,39 +3677,14 @@
       };
 
       byId("publishModal").classList.remove("open");
-      mobileStepIndex = routeItems.length;
-      byId("mobileItems").innerHTML = `
-        <article class="answer-card">
-          <h3>Enviando checklist</h3>
-          <p>Salvando as respostas e imagens no Render. Aguarde a confirmacao antes de sair desta tela.</p>
-        </article>
-      `;
-
-      await new Promise(resolve => setTimeout(resolve, 50));
-      const savedReport = await saveReportToServer(report);
       confirmButton.disabled = false;
       confirmButton.textContent = "Sim, publicar checklist";
-
-      if (!savedReport) {
-        byId("mobileItems").innerHTML = `
-          <article class="answer-card">
-            <h3>Nao foi possivel publicar</h3>
-            <p>O checklist nao foi salvo no Render. Confira a conexao e tente publicar novamente.</p>
-            <button class="btn primary" data-retry-publish>Tentar novamente</button>
-          </article>
-        `;
-        byId("mobileItems").querySelector("[data-retry-publish]").addEventListener("click", () => byId("publishModal").classList.add("open"));
-        return;
-      }
-
-      byId("mobileItems").innerHTML = `
-        <article class="answer-card">
-          <h3>Checklist publicado</h3>
-          <p>Checklist salvo no Render com sucesso e disponivel no historico.</p>
-          <button class="btn primary" data-go-history>Ver historico</button>
-        </article>
-      `;
-      byId("mobileItems").querySelector("[data-go-history]").addEventListener("click", () => setView("dashboard"));
+      queueChecklistPublish(report);
+      selectedRouteId = null;
+      selectedLocationId = null;
+      mobileStepIndex = 0;
+      mobileAnswers = {};
+      renderMobileItems();
     }
 
     function findReport(id) {
@@ -3471,8 +3764,7 @@
         <article class="checklist-report">
           <header class="report-cover">
             <div class="report-brand">
-              <div class="report-brand-mark">U</div>
-              <div><strong>UNICO</strong><span>Checklist Logistica</span></div>
+              <img class="report-brand-logo" src="/logo-normal.webp" alt="UNICO Logistica">
             </div>
             <div class="report-checklist-id">
               <span>Checklist</span>
@@ -3520,6 +3812,7 @@
           .checklist-report{border:1px solid #cfdadd;font-size:12px;line-height:1.42;color:#45575d;}
           .report-cover{display:flex;justify-content:space-between;gap:18px;padding:18px 22px;border-bottom:2px solid #cbd5d9;}
           .report-brand{display:flex;align-items:center;gap:12px;}
+          .report-brand-logo{width:170px;height:auto;display:block;background:#050505;padding:4px 6px;}
           .report-brand-mark{width:48px;height:48px;display:grid;place-items:center;background:#0099b8;color:#fff;font-weight:800;border:2px solid #dbe7ea;}
           .report-brand strong,.report-checklist-id strong{display:block;color:#33474d;font-size:21px;letter-spacing:.02em;}
           .report-brand span,.report-checklist-id span{display:block;color:#7a8b91;margin-top:3px;font-size:11px;}
@@ -3570,6 +3863,7 @@
       renderSavedRouteManager();
       renderBuilderItems("builderItems");
       renderMobileItems();
+      renderPublishStatus();
     }
 
     byId("loginForm").addEventListener("submit", event => {
@@ -3614,6 +3908,9 @@
         byId("scannerModal").classList.remove("open");
         closeReportModal();
       }
+    });
+    window.addEventListener("online", () => {
+      if (currentUser) syncAllPendingPublishes();
     });
     byId("historySearch").addEventListener("input", renderDashboard);
     byId("routeTitle").addEventListener("input", () => {

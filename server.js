@@ -12,7 +12,8 @@ const routesPath = path.join(dataDir, "routes.json");
 const locationsPath = path.join(dataDir, "locations.json");
 const publicFiles = {
   "/manifest.json": { path: path.join(__dirname, "manifest.json"), type: "application/manifest+json" },
-  "/icon.svg": { path: path.join(__dirname, "icon.svg"), type: "image/svg+xml" }
+  "/icon.svg": { path: path.join(__dirname, "icon.svg"), type: "image/svg+xml" },
+  "/logo-normal.webp": { path: path.join(__dirname, "logo-normal.webp"), type: "image/webp" }
 };
 const sessions = new Map();
 
