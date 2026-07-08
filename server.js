@@ -964,7 +964,9 @@ const server = http.createServer(async (request, response) => {
         report = await uploadReportImages({
           ...payload,
           id: String(payload.id || Date.now()),
-          executor: payload.executor || session.name || session.username
+          executor: session.name || session.username || payload.executor || "Nao informado",
+          executorName: session.name || session.username || payload.executorName || payload.executor || "Nao informado",
+          executorUsername: session.username || payload.executorUsername || ""
         });
       } catch (error) {
         console.error("Nao foi possivel enviar midias para o Cloudinary:", error.message);

@@ -570,6 +570,26 @@
       box-shadow: 0 8px 18px rgba(17, 17, 17, .1);
       padding: 18px;
       min-height: 104px;
+      text-align: left;
+      cursor: pointer;
+      transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+      width: 100%;
+    }
+
+    .branch-card:hover,
+    .branch-card.active {
+      border-color: var(--brand);
+      box-shadow: 0 10px 24px rgba(214, 0, 0, .16);
+      transform: translateY(-1px);
+    }
+
+    .branch-card.active {
+      background: #fff8f8;
+    }
+
+    .branch-card:focus-visible {
+      outline: 3px solid rgba(214, 0, 0, .25);
+      outline-offset: 2px;
     }
 
     .branch-card span {
@@ -591,6 +611,15 @@
       color: var(--ink);
     }
 
+    .branch-card em {
+      display: block;
+      color: var(--brand-dark);
+      font-size: 12px;
+      font-style: normal;
+      font-weight: 800;
+      margin-top: 8px;
+    }
+
     .history-toolbar {
       display: flex;
       justify-content: space-between;
@@ -603,7 +632,26 @@
       margin: 0;
     }
 
+    .history-title-block {
+      display: grid;
+      gap: 6px;
+    }
+
+    .history-filter-label {
+      color: var(--brand-dark);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .history-tools {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: min(620px, 100%);
+    }
+
     .history-search {
+      flex: 1;
       min-width: 260px;
       border: 1px solid var(--line);
       background: #fff;
@@ -1682,6 +1730,13 @@
         width: 100%;
       }
 
+      .history-tools {
+        align-items: stretch;
+        flex-direction: column;
+        min-width: 0;
+        width: 100%;
+      }
+
       .steps,
       .type-grid {
         grid-template-columns: repeat(2, minmax(0,1fr));
@@ -1889,8 +1944,14 @@
           <div class="branch-summary" id="branchSummary"></div>
 
           <div class="history-toolbar">
-            <h2>Historico por filial</h2>
-            <input class="history-search" id="historySearch" placeholder="Pesquisar por checklist, filial ou executor">
+            <div class="history-title-block">
+              <h2>Historico por filial</h2>
+              <span class="history-filter-label" id="historyBranchFilter" hidden></span>
+            </div>
+            <div class="history-tools">
+              <button class="btn small" id="clearBranchFilter" type="button" hidden>Mostrar todas</button>
+              <input class="history-search" id="historySearch" placeholder="Pesquisar por checklist, filial, roteiro ou executor">
+            </div>
           </div>
 
           <div class="history-table-wrap">
@@ -2490,6 +2551,7 @@
     let autoOpenPhotoRequest = null;
     let pendingPhotoReview = null;
     let publishedChecklists = [];
+    let selectedHistoryBranch = "";
     let savedRoutes = [];
     let systemUsers = [];
     let editingRouteId = null;
@@ -3175,36 +3237,59 @@
 
       const query = (byId("historySearch")?.value || "").trim().toLowerCase();
       const allHistory = [...publishedChecklists];
+      const branchFilter = selectedHistoryBranch;
       const filtered = allHistory.filter(item => {
-        const text = `${item.id} ${item.division} ${item.branch} ${item.route} ${item.object} ${item.executor}`.toLowerCase();
-        return text.includes(query);
+        const branch = item.branch || "Sem filial";
+        const executor = item.executor || item.executorName || item.executorUsername || "Nao informado";
+        const text = `${item.id} ${item.division} ${branch} ${item.route} ${item.object} ${executor} ${item.executorUsername || ""}`.toLowerCase();
+        return (!branchFilter || branch === branchFilter) && text.includes(query);
       });
-      const branches = [...new Set(allHistory.map(item => item.branch))];
+      const branches = [...new Set(allHistory.map(item => item.branch || "Sem filial"))];
+      const filterLabel = byId("historyBranchFilter");
+      const clearFilter = byId("clearBranchFilter");
+      if (filterLabel) {
+        filterLabel.hidden = !branchFilter;
+        filterLabel.textContent = branchFilter ? `Filtrando: ${branchFilter}` : "";
+      }
+      if (clearFilter) clearFilter.hidden = !branchFilter;
 
       summary.innerHTML = "";
       branches.forEach(branch => {
-        const branchItems = allHistory.filter(item => item.branch === branch);
+        const branchItems = allHistory.filter(item => (item.branch || "Sem filial") === branch);
         const divisions = [...new Set(branchItems.map(item => item.division))].join(" / ");
-        const card = document.createElement("article");
-        card.className = "branch-card";
-        card.innerHTML = `<span>${divisions}</span><strong>${branchItems.length}</strong><small>${branch}</small>`;
+        const executors = [...new Set(branchItems.map(item => item.executor || item.executorName || item.executorUsername).filter(Boolean))];
+        const card = document.createElement("button");
+        card.type = "button";
+        card.className = `branch-card${branch === branchFilter ? " active" : ""}`;
+        card.innerHTML = `
+          <span>${escapeHtml(divisions || "Sem divisao")}</span>
+          <strong>${branchItems.length}</strong>
+          <small>${escapeHtml(branch)}</small>
+          <em>${branch === branchFilter ? "Filtro ativo" : "Clique para filtrar"}${executors.length ? ` - ${escapeHtml(executors.slice(0, 2).join(" / "))}` : ""}</em>
+        `;
+        card.addEventListener("click", () => {
+          selectedHistoryBranch = selectedHistoryBranch === branch ? "" : branch;
+          renderDashboard();
+        });
         summary.append(card);
       });
 
       rows.innerHTML = "";
       filtered.forEach(item => {
+        const branch = item.branch || "Sem filial";
+        const executor = item.executor || item.executorName || item.executorUsername || "Nao informado";
         const row = document.createElement("tr");
         row.innerHTML = `
-          <td>${item.id}</td>
-          <td>${item.division}</td>
-          <td>${item.branch}</td>
-          <td>${item.route}</td>
-          <td>${item.object}</td>
-          <td>${item.created}</td>
-          <td>${item.finished}</td>
-          <td>${item.executor}</td>
-          <td><span class="status-pill">${item.status}</span></td>
-          <td><div class="report-actions"><button class="btn small" data-view-report="${item.id}">Ver</button><button class="btn small" data-export-report="${item.id}">PDF</button><button class="btn small danger" data-delete-report="${item.id}">Excluir</button></div></td>
+          <td>${escapeHtml(item.id)}</td>
+          <td>${escapeHtml(item.division || "Nao informado")}</td>
+          <td>${escapeHtml(branch)}</td>
+          <td>${escapeHtml(item.route || "Nao informado")}</td>
+          <td>${escapeHtml(item.object || "Nao informado")}</td>
+          <td>${escapeHtml(item.created || "Nao informado")}</td>
+          <td>${escapeHtml(item.finished || "Nao informado")}</td>
+          <td>${escapeHtml(executor)}</td>
+          <td><span class="status-pill">${escapeHtml(item.status || "Execucao finalizada")}</span></td>
+          <td><div class="report-actions"><button class="btn small" data-view-report="${escapeHtml(item.id)}">Ver</button><button class="btn small" data-export-report="${escapeHtml(item.id)}">PDF</button><button class="btn small danger" data-delete-report="${escapeHtml(item.id)}">Excluir</button></div></td>
         `;
         rows.append(row);
       });
@@ -4228,6 +4313,8 @@
         created: now.toLocaleDateString("pt-BR") + " - " + now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
         finished: now.toLocaleDateString("pt-BR") + " - " + now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
         executor: currentUser?.name || currentUser?.username || "Unico Group",
+        executorName: currentUser?.name || currentUser?.username || "Unico Group",
+        executorUsername: currentUser?.username || "",
         status: "Execucao finalizada",
         answers: mobileAnswers,
         items: routeItems
@@ -4476,6 +4563,10 @@
       saveMobileDraftNow();
     });
     byId("historySearch").addEventListener("input", renderDashboard);
+    byId("clearBranchFilter").addEventListener("click", () => {
+      selectedHistoryBranch = "";
+      renderDashboard();
+    });
     byId("routeTitle").addEventListener("input", () => {
       renderRouteSummary();
       renderRoutePicker();
