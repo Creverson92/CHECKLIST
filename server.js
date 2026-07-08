@@ -16,6 +16,51 @@ const publicFiles = {
   "/logo-normal.webp": { path: path.join(__dirname, "logo-normal.webp"), type: "image/webp" }
 };
 const sessions = new Map();
+const databaseUrl = process.env.DATABASE_URL || "";
+let pgPool = null;
+let reportTableReady = null;
+
+function databaseSslConfig() {
+  if (!databaseUrl || /localhost|127\.0\.0\.1/i.test(databaseUrl)) return false;
+  return { rejectUnauthorized: false };
+}
+
+function getPgPool() {
+  if (!databaseUrl) return null;
+  if (pgPool) return pgPool;
+  try {
+    const { Pool } = require("pg");
+    pgPool = new Pool({
+      connectionString: databaseUrl,
+      ssl: databaseSslConfig(),
+      max: 5
+    });
+    pgPool.on("error", error => {
+      console.error("Erro no banco de dados do historico:", error.message);
+    });
+    return pgPool;
+  } catch (error) {
+    console.error("DATABASE_URL foi configurado, mas o pacote pg nao esta disponivel:", error.message);
+    return null;
+  }
+}
+
+async function ensureReportTable() {
+  const pool = getPgPool();
+  if (!pool) return false;
+  if (!reportTableReady) {
+    reportTableReady = pool.query(`
+      CREATE TABLE IF NOT EXISTS checklist_reports (
+        id TEXT PRIMARY KEY,
+        report JSONB NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+  }
+  await reportTableReady;
+  return true;
+}
 
 const seedUsers = [
   {
@@ -478,7 +523,7 @@ function allUsers() {
   return [...byUsername.values()];
 }
 
-function readReports() {
+function readReportsFromFile() {
   try {
     const reports = JSON.parse(fs.readFileSync(reportsPath, "utf8"));
     return Array.isArray(reports) ? reports : [];
@@ -487,9 +532,69 @@ function readReports() {
   }
 }
 
-function writeReports(reports) {
+function writeReportsToFile(reports) {
   fs.mkdirSync(dataDir, { recursive: true });
   fs.writeFileSync(reportsPath, JSON.stringify(reports, null, 2));
+}
+
+async function readReportsFromDatabase() {
+  try {
+    if (!await ensureReportTable()) return null;
+    const result = await pgPool.query("SELECT report FROM checklist_reports ORDER BY updated_at DESC, created_at DESC");
+    if (!result.rows.length) {
+      const fileReports = readReportsFromFile();
+      if (fileReports.length) {
+        await writeReportsToDatabase(fileReports);
+        return fileReports;
+      }
+    }
+    return result.rows.map(row => row.report).filter(Boolean);
+  } catch (error) {
+    console.error("Nao foi possivel ler historico no banco:", error.message);
+    return null;
+  }
+}
+
+async function writeReportsToDatabase(reports) {
+  let client;
+  try {
+    if (!await ensureReportTable()) return false;
+    client = await pgPool.connect();
+    await client.query("BEGIN");
+    await client.query("DELETE FROM checklist_reports");
+    for (const report of reports) {
+      if (!report?.id) continue;
+      await client.query(
+        `INSERT INTO checklist_reports (id, report, created_at, updated_at)
+         VALUES ($1, $2::jsonb, COALESCE($3::timestamptz, NOW()), NOW())
+         ON CONFLICT (id) DO UPDATE SET report = EXCLUDED.report, updated_at = NOW()`,
+        [String(report.id), JSON.stringify(report), report.createdAt || report.finishedAt || null]
+      );
+    }
+    await client.query("COMMIT");
+    return true;
+  } catch (error) {
+    if (client) await client.query("ROLLBACK").catch(() => {});
+    console.error("Nao foi possivel gravar historico no banco:", error.message);
+    return false;
+  } finally {
+    if (client) client.release();
+  }
+}
+
+async function readReports() {
+  const databaseReports = await readReportsFromDatabase();
+  if (Array.isArray(databaseReports)) return databaseReports;
+  return readReportsFromFile();
+}
+
+async function writeReports(reports) {
+  const savedInDatabase = await writeReportsToDatabase(reports);
+  if (savedInDatabase) {
+    writeReportsToFile(reports);
+    return;
+  }
+  writeReportsToFile(reports);
 }
 
 function readRoutes() {
@@ -565,7 +670,7 @@ const server = http.createServer(async (request, response) => {
     const body = {
       locations: readLocations(),
       routes: readRoutes(),
-      reports: isAdminSession(session) ? readReports() : [],
+      reports: isAdminSession(session) ? await readReports() : [],
       users: isAdminSession(session) ? allUsers().map(publicUser) : []
     };
     return sendJson(response, 200, body);
@@ -696,7 +801,7 @@ const server = http.createServer(async (request, response) => {
     if (!session) return sendJson(response, 401, { error: "Sessao expirada." });
 
     if (request.method === "GET") {
-      return sendJson(response, 200, { reports: readReports() });
+      return sendJson(response, 200, { reports: await readReports() });
     }
 
     if (request.method === "POST") {
@@ -710,9 +815,9 @@ const server = http.createServer(async (request, response) => {
         id: String(payload.id || Date.now()),
         executor: payload.executor || session.name || session.username
       };
-      const reports = readReports().filter(item => String(item.id) !== report.id);
+      const reports = (await readReports()).filter(item => String(item.id) !== report.id);
       reports.unshift(report);
-      writeReports(reports);
+      await writeReports(reports);
       return sendJson(response, 201, { report });
     }
   }
@@ -722,7 +827,7 @@ const server = http.createServer(async (request, response) => {
     if (!isAdminSession(session)) return sendJson(response, 403, { error: "Acesso negado." });
 
     const id = decodeURIComponent(pathname.replace("/api/reports/", ""));
-    writeReports(readReports().filter(item => String(item.id) !== id));
+    await writeReports((await readReports()).filter(item => String(item.id) !== id));
     return sendJson(response, 200, { ok: true });
   }
 
