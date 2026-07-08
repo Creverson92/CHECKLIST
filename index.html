@@ -1233,6 +1233,13 @@
       padding: 14px;
       text-align: center;
       font-weight: 650;
+      width: 100%;
+      display: block;
+    }
+
+    .photo-drop:disabled {
+      opacity: .55;
+      cursor: not-allowed;
     }
 
     .media-tools {
@@ -1436,6 +1443,64 @@
       background: #fff;
       box-shadow: 0 28px 70px rgba(0,0,0,.28);
       border: 1px solid var(--line);
+    }
+
+    .camera-modal {
+      width: min(760px, 100%);
+      background: #0d0d0d;
+      color: #fff;
+      border-color: #1f1f1f;
+    }
+
+    .camera-modal .panel-header {
+      background: #111;
+      border-bottom: 1px solid #2d2d2d;
+    }
+
+    .camera-modal .panel-header h2,
+    .camera-modal .lead {
+      color: #fff;
+    }
+
+    .camera-body {
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+    }
+
+    .camera-stage {
+      position: relative;
+      overflow: hidden;
+      background: #000;
+      min-height: min(70vh, 520px);
+      display: grid;
+      place-items: center;
+      border: 1px solid #2b2b2b;
+    }
+
+    .camera-stage video {
+      width: 100%;
+      height: 100%;
+      max-height: min(70vh, 520px);
+      object-fit: contain;
+      background: #000;
+      display: block;
+    }
+
+    .camera-actions {
+      display: grid;
+      grid-template-columns: 1fr 1.2fr;
+      gap: 10px;
+    }
+
+    .camera-actions .btn {
+      min-height: 48px;
+    }
+
+    .camera-status {
+      color: #d9d9d9;
+      font-size: 13px;
+      min-height: 18px;
     }
 
     .report-modal {
@@ -2184,6 +2249,26 @@
     </div>
   </div>
 
+  <div class="modal-backdrop" id="photoCameraModal" role="dialog" aria-modal="true" aria-labelledby="photoCameraTitle">
+    <div class="modal camera-modal">
+      <div class="panel-header">
+        <h2 id="photoCameraTitle">Tirar foto</h2>
+        <button class="icon-btn" id="closePhotoCameraModal" aria-label="Fechar">X</button>
+      </div>
+      <div class="camera-body">
+        <div class="camera-stage">
+          <video id="photoCameraVideo" autoplay muted playsinline></video>
+          <canvas id="photoCameraCanvas" hidden></canvas>
+        </div>
+        <div class="camera-status" id="photoCameraStatus">Aponte a camera para a evidencia.</div>
+        <div class="camera-actions">
+          <button class="btn" id="togglePhotoFlash" type="button">Flash indisponivel</button>
+          <button class="btn primary" id="capturePhotoButton" type="button">Capturar foto</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-backdrop" id="reportModal" role="dialog" aria-modal="true" aria-labelledby="reportModalTitle">
     <div class="modal report-modal">
       <div class="panel-header">
@@ -2564,6 +2649,11 @@
     let scannerStream = null;
     let scannerTimer = null;
     let scannerTargetItemId = null;
+    let photoCameraStream = null;
+    let photoCameraTrack = null;
+    let photoCameraRequest = null;
+    let photoTorchOn = false;
+    let photoTorchSupported = false;
     let currentUser = null;
 
     const views = document.querySelectorAll(".view");
@@ -3726,7 +3816,7 @@
         : `${title}s registradas: ${photos.length} de ${max}.`;
       const disableInput = pendingReview || photos.length >= max;
       const cameraButton = captureMode === "camera" || captureMode === "both"
-        ? `<label class="photo-drop"><input data-photo-input data-photo-source="camera" type="file" accept="image/*" capture="environment" style="display:none"> Tirar foto ${Math.min(photos.length + 1, max)} de ${max}</label>`
+        ? `<button class="photo-drop" type="button" data-open-camera data-answer-key="${answerKey}" ${disableInput ? "disabled" : ""}>Tirar foto ${Math.min(photos.length + 1, max)} de ${max}</button><input data-photo-input data-photo-source="camera" data-camera-fallback type="file" accept="image/*" capture="environment" style="display:none">`
         : "";
       const galleryButton = captureMode === "gallery" || captureMode === "both"
         ? `<label class="photo-drop"><input data-photo-input data-photo-source="gallery" type="file" accept="image/*" style="display:none"> Adicionar imagem da galeria</label>`
@@ -3774,6 +3864,21 @@
           renderMobileItems();
         });
       }
+      wrap.querySelectorAll("[data-open-camera]").forEach(cameraButtonEl => {
+        cameraButtonEl.addEventListener("click", () => {
+          if (disableInput) return;
+          const fallbackInput = wrap.querySelector("[data-camera-fallback]");
+          openPhotoCamera({
+            item,
+            answerKey,
+            countAsValue,
+            max,
+            min,
+            title,
+            fallbackInput
+          });
+        });
+      });
       wrap.querySelectorAll("[data-photo-input]").forEach(fileInput => {
         fileInput.disabled = disableInput;
         fileInput.addEventListener("change", async event => {
@@ -3971,9 +4076,9 @@
       const request = autoOpenPhotoRequest;
       if (request && request.itemId === item.id) {
         autoOpenPhotoRequest = null;
-        const nextCameraInput = target.querySelector(`[data-photo-input][data-photo-source="camera"]`);
-        if (nextCameraInput && !nextCameraInput.disabled) {
-          setTimeout(() => nextCameraInput.click(), 250);
+        const nextCameraButton = target.querySelector(`[data-open-camera][data-answer-key="${request.answerKey}"]`);
+        if (nextCameraButton && !nextCameraButton.disabled) {
+          setTimeout(() => nextCameraButton.click(), 250);
         }
       }
     }
@@ -4032,6 +4137,142 @@
       const size = photo.size ? `${(photo.size / 1024 / 1024).toFixed(1)} MB` : "tamanho original";
       const quality = photo.quality === "original" ? "qualidade original" : "sem redimensionamento";
       return `${resolution} - ${size} - ${quality}`;
+    }
+
+    function dataUrlSize(dataUrl) {
+      const base64 = String(dataUrl || "").split(",")[1] || "";
+      return Math.max(0, Math.floor((base64.length * 3) / 4));
+    }
+
+    function updatePhotoFlashButton() {
+      const flashButton = byId("togglePhotoFlash");
+      if (!flashButton) return;
+      flashButton.disabled = !photoTorchSupported;
+      flashButton.textContent = photoTorchSupported
+        ? (photoTorchOn ? "Flash ligado" : "Flash desligado")
+        : "Flash indisponivel";
+      flashButton.classList.toggle("primary", photoTorchSupported && photoTorchOn);
+    }
+
+    async function setPhotoTorch(enabled) {
+      if (!photoCameraTrack) return false;
+      try {
+        await photoCameraTrack.applyConstraints({ advanced: [{ torch: Boolean(enabled) }] });
+        photoTorchOn = Boolean(enabled);
+        updatePhotoFlashButton();
+        return true;
+      } catch (error) {
+        photoTorchSupported = false;
+        photoTorchOn = false;
+        updatePhotoFlashButton();
+        byId("photoCameraStatus").textContent = "Este aparelho ou navegador nao liberou controle de flash.";
+        return false;
+      }
+    }
+
+    async function openPhotoCamera(request) {
+      photoCameraRequest = request;
+      byId("photoCameraTitle").textContent = `Tirar ${request.title.toLowerCase()}`;
+      byId("photoCameraStatus").textContent = "Abrindo camera traseira...";
+      byId("photoCameraModal").classList.add("open");
+      byId("capturePhotoButton").disabled = true;
+      photoTorchOn = false;
+      photoTorchSupported = false;
+      updatePhotoFlashButton();
+
+      if (!navigator.mediaDevices?.getUserMedia) {
+        byId("photoCameraStatus").textContent = "Camera do navegador indisponivel. Abrindo camera nativa do aparelho.";
+        const fallbackInput = request.fallbackInput;
+        closePhotoCamera();
+        fallbackInput?.click();
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+          }
+        });
+        if (photoCameraRequest !== request) {
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
+        photoCameraStream = stream;
+        const video = byId("photoCameraVideo");
+        video.srcObject = photoCameraStream;
+        await video.play().catch(() => {});
+        photoCameraTrack = photoCameraStream.getVideoTracks()[0] || null;
+        const capabilities = photoCameraTrack?.getCapabilities?.() || {};
+        photoTorchSupported = Boolean(capabilities.torch);
+        updatePhotoFlashButton();
+        byId("capturePhotoButton").disabled = false;
+        byId("photoCameraStatus").textContent = photoTorchSupported
+          ? "Camera aberta. Use o flash se precisar antes de capturar."
+          : "Camera aberta. Flash nao disponivel neste aparelho/navegador.";
+      } catch (error) {
+        byId("photoCameraStatus").textContent = "Nao foi possivel abrir a camera do app. Abrindo camera nativa do aparelho.";
+        const fallbackInput = request.fallbackInput;
+        closePhotoCamera();
+        fallbackInput?.click();
+      }
+    }
+
+    async function togglePhotoFlash() {
+      if (!photoTorchSupported) return;
+      await setPhotoTorch(!photoTorchOn);
+    }
+
+    function closePhotoCamera(options = {}) {
+      if (photoTorchOn) setPhotoTorch(false).catch(() => {});
+      if (photoCameraStream) photoCameraStream.getTracks().forEach(track => track.stop());
+      photoCameraStream = null;
+      photoCameraTrack = null;
+      photoTorchOn = false;
+      photoTorchSupported = false;
+      byId("photoCameraVideo").srcObject = null;
+      byId("capturePhotoButton").disabled = false;
+      updatePhotoFlashButton();
+      byId("photoCameraModal").classList.remove("open");
+      if (!options.keepFallback) photoCameraRequest = null;
+    }
+
+    async function capturePhotoFromCamera() {
+      const request = photoCameraRequest;
+      const video = byId("photoCameraVideo");
+      if (!request || !video.videoWidth || !video.videoHeight) {
+        byId("photoCameraStatus").textContent = "A camera ainda esta carregando. Tente novamente em instantes.";
+        return;
+      }
+
+      const canvas = byId("photoCameraCanvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const url = canvas.toDataURL("image/jpeg", 0.98);
+      const currentCount = (mobileAnswers[request.item.id]?.[request.answerKey] || []).length;
+      const photo = {
+        name: `${request.title} ${currentCount + 1}.jpg`,
+        url,
+        type: "image/jpeg",
+        size: dataUrlSize(url),
+        width: canvas.width,
+        height: canvas.height,
+        quality: "original",
+        flash: photoTorchOn ? "ligado" : "desligado"
+      };
+      const savedCount = savePhotoAnswer(request.item, request.answerKey, photo, request.countAsValue, request.max);
+      const shouldOpenNext = savedCount < request.max && savedCount < request.min;
+      closePhotoCamera();
+      if (shouldOpenNext) {
+        autoOpenPhotoRequest = { itemId: request.item.id, answerKey: request.answerKey };
+      }
+      scheduleMobileDraftSave();
+      renderMobileItems();
     }
 
     function setupSignaturePads() {
@@ -4537,6 +4778,9 @@
     byId("cancelPublish").addEventListener("click", () => byId("publishModal").classList.remove("open"));
     byId("confirmPublish").addEventListener("click", publishChecklist);
     byId("closeScannerModal").addEventListener("click", closeScanner);
+    byId("closePhotoCameraModal").addEventListener("click", closePhotoCamera);
+    byId("togglePhotoFlash").addEventListener("click", togglePhotoFlash);
+    byId("capturePhotoButton").addEventListener("click", capturePhotoFromCamera);
     function closeReportModal() {
       byId("reportModal").classList.remove("open");
     }
@@ -4545,11 +4789,15 @@
     byId("reportModal").addEventListener("click", event => {
       if (event.target === byId("reportModal")) closeReportModal();
     });
+    byId("photoCameraModal").addEventListener("click", event => {
+      if (event.target === byId("photoCameraModal")) closePhotoCamera();
+    });
     document.addEventListener("keydown", event => {
       if (event.key === "Escape") {
         byId("typeModal").classList.remove("open");
         byId("publishModal").classList.remove("open");
         byId("scannerModal").classList.remove("open");
+        closePhotoCamera();
         closeReportModal();
       }
     });
