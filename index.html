@@ -87,6 +87,7 @@
       min-height: 100vh;
       display: grid;
       grid-template-columns: 248px 1fr;
+      grid-template-rows: auto 1fr;
     }
 
     .app-shell[hidden],
@@ -196,10 +197,12 @@
     .sidebar {
       background: var(--navy);
       color: #fff;
-      padding: 22px 18px;
+      padding: 18px 0 22px;
       position: sticky;
-      top: 0;
-      height: 100vh;
+      top: 78px;
+      height: calc(100vh - 78px);
+      grid-column: 1;
+      grid-row: 2;
     }
 
     .brand {
@@ -251,18 +254,19 @@
       color: #e5e5e5;
       background: transparent;
       border-left: 3px solid transparent;
-      padding: 12px 12px;
+      padding: 14px 20px;
       display: flex;
       gap: 10px;
       align-items: center;
       text-align: left;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
+      font-weight: 650;
     }
 
     .nav-button.active,
     .nav-button:hover {
       color: #fff;
-      background: rgba(255,255,255,.08);
+      background: linear-gradient(90deg, rgba(227,6,19,.25), rgba(255,255,255,.05));
       border-left-color: var(--brand);
     }
 
@@ -278,10 +282,12 @@
 
     .content {
       min-width: 0;
+      grid-column: 2;
+      grid-row: 2;
     }
 
     .topbar {
-      min-height: 74px;
+      min-height: 78px;
       background: #111;
       border-bottom: 4px solid var(--brand);
       display: flex;
@@ -292,6 +298,8 @@
       position: sticky;
       top: 0;
       z-index: 5;
+      grid-column: 1 / -1;
+      grid-row: 1;
     }
 
     .crumb {
@@ -320,8 +328,8 @@
     }
 
     .top-logo-card {
-      width: 222px;
-      min-height: 70px;
+      width: 248px;
+      min-height: 74px;
       background: #fff;
       display: grid;
       place-items: center;
@@ -365,18 +373,14 @@
       min-height: 32px;
       display: inline-flex;
       align-items: center;
+      padding-left: 26px;
+      border-left: 1px solid rgba(255,255,255,.28);
       color: #fff;
       font-size: 14px;
       font-weight: 800;
       letter-spacing: .02em;
       text-transform: uppercase;
       white-space: nowrap;
-    }
-
-    .sidebar .top-logo-card {
-      width: 100%;
-      max-width: 220px;
-      min-height: 72px;
     }
 
     .top-actions {
@@ -397,6 +401,25 @@
     .topbar .btn.primary {
       background: var(--brand);
       border-color: var(--brand);
+    }
+
+    .monitoring-pill {
+      min-height: 38px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #fff;
+      font-weight: 800;
+      padding-left: 18px;
+      border-left: 1px solid rgba(255,255,255,.28);
+    }
+
+    .monitoring-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      background: #31d76b;
+      box-shadow: 0 0 12px rgba(49, 215, 107, .7);
     }
 
     .main {
@@ -1599,7 +1622,9 @@
 
     @media (max-width: 960px) {
       .app-shell {
-        display: block;
+        display: grid;
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto 1fr;
       }
 
       .sidebar {
@@ -1607,19 +1632,13 @@
         position: static;
         display: grid;
         gap: 14px;
-        padding: 18px 16px;
+        padding: 12px 14px;
+        grid-column: 1;
+        grid-row: 2;
       }
 
       .sidebar .brand {
         margin-bottom: 0;
-      }
-
-      .sidebar .brand-logo {
-        width: min(240px, 76vw);
-      }
-
-      .sidebar .top-logo-card {
-        width: min(240px, 76vw);
       }
 
       .nav {
@@ -1673,6 +1692,13 @@
         display: grid;
         gap: 12px;
         padding: 0 14px 14px 0;
+        grid-column: 1;
+        grid-row: 1;
+      }
+
+      .content {
+        grid-column: 1;
+        grid-row: 3;
       }
 
       .header-brand {
@@ -1685,7 +1711,7 @@
 
       .top-logo-card {
         width: min(220px, 48vw);
-        min-height: 68px;
+        min-height: 72px;
         padding: 10px 12px;
       }
 
@@ -1698,7 +1724,7 @@
       }
 
       .topbar-title {
-        min-height: 68px;
+        min-height: 72px;
         padding: 0 12px;
         justify-content: flex-start;
         font-size: clamp(11px, 2.8vw, 14px);
@@ -1722,6 +1748,13 @@
       .topbar .top-actions .pill {
         width: 100%;
         min-height: 42px;
+      }
+
+      .monitoring-pill {
+        grid-column: 1 / -1;
+        justify-content: center;
+        padding-left: 0;
+        border-left: 0;
       }
     }
 
@@ -1777,11 +1810,11 @@
 
       .top-logo-card {
         width: 46vw;
-        min-height: 62px;
+        min-height: 66px;
       }
 
       .topbar-title {
-        min-height: 62px;
+        min-height: 66px;
       }
     }
   </style>
@@ -1809,12 +1842,24 @@
   </section>
 
   <div class="app-shell" id="appShell" hidden>
-    <aside class="sidebar">
-      <div class="brand">
+    <header class="topbar">
+      <div class="header-brand">
         <div class="top-logo-card" aria-label="UNICO Group">
           <span class="unico-wordmark"><span class="unico-chevron">›</span>ÚNICO<span class="unico-group">GROUP</span></span>
         </div>
+        <div class="topbar-title">Checklist operacional</div>
+        <div class="crumb"><strong>UNICO Logistica LTDA</strong> / Pouso Alegre / Controle operacional</div>
       </div>
+      <div class="top-actions">
+        <span class="pill" id="userBadge">Usuario</span>
+        <button class="btn" data-view-trigger="locations">Administrar locais</button>
+        <button class="btn primary" data-view-trigger="builder">Novo roteiro</button>
+        <button class="btn" id="logoutButton">Sair</button>
+        <span class="monitoring-pill">Monitorando <span class="monitoring-dot" aria-hidden="true"></span></span>
+      </div>
+    </header>
+
+    <aside class="sidebar">
       <nav class="nav" aria-label="Navegacao principal">
         <button class="nav-button active" data-view="dashboard"><span class="nav-icon">01</span>Inicio</button>
         <button class="nav-button" data-view="locations"><span class="nav-icon">02</span>Localidades</button>
@@ -1825,19 +1870,6 @@
     </aside>
 
     <div class="content">
-      <header class="topbar">
-        <div class="header-brand">
-          <div class="topbar-title">Checklist operacional</div>
-          <div class="crumb"><strong>UNICO Logistica LTDA</strong> / Pouso Alegre / Controle operacional</div>
-        </div>
-        <div class="top-actions">
-          <span class="pill" id="userBadge">Usuario</span>
-          <button class="btn" data-view-trigger="locations">Administrar locais</button>
-          <button class="btn primary" data-view-trigger="builder">Novo roteiro</button>
-          <button class="btn" id="logoutButton">Sair</button>
-        </div>
-      </header>
-
       <main class="main">
         <section class="view active" id="dashboard">
           <div class="page-title">
