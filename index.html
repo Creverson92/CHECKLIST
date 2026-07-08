@@ -2240,17 +2240,24 @@
     ];
 
     async function loadPublishedChecklists() {
+      const localReports = await readReportBackupsFromDevice();
       const response = await fetch("/api/reports", { cache: "no-store" }).catch(() => null);
-      if (!response || !response.ok) return;
+      if (!response || !response.ok) {
+        publishedChecklists = mergeReports(publishedChecklists, localReports);
+        renderDashboard();
+        return;
+      }
 
       const result = await response.json().catch(() => ({}));
-      if (!Array.isArray(result.reports)) return;
+      const serverReports = Array.isArray(result.reports) ? result.reports : [];
 
-      publishedChecklists = result.reports;
+      publishedChecklists = mergeReports(serverReports, localReports, publishedChecklists);
+      persistReportBackups(publishedChecklists);
+      restoreMissingReportsToServer(localReports, serverReports);
       renderDashboard();
     }
 
-    async function saveReportToServer(report) {
+    async function postReportToServer(report) {
       const response = await fetch("/api/reports", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2262,12 +2269,32 @@
       const result = await response.json().catch(() => ({}));
       if (!result.report) return null;
 
-      publishedChecklists = [
-        result.report,
-        ...publishedChecklists.filter(item => String(item.id) !== String(result.report.id))
-      ];
-      renderDashboard();
       return result.report;
+    }
+
+    async function saveReportToServer(report) {
+      const savedReport = await postReportToServer(report);
+      if (!savedReport) return null;
+
+      publishedChecklists = mergeReports([savedReport], publishedChecklists);
+      persistReportBackup(savedReport);
+      renderDashboard();
+      return savedReport;
+    }
+
+    async function restoreMissingReportsToServer(localReports, serverReports) {
+      if (!currentUser || navigator.onLine === false || reportRestoreInFlight) return;
+      const serverIds = new Set((serverReports || []).map(report => String(report.id)));
+      const missing = (localReports || []).filter(report => report?.id && !serverIds.has(String(report.id)));
+      if (!missing.length) return;
+      reportRestoreInFlight = true;
+      try {
+        for (const report of missing.slice(0, 25)) {
+          await postReportToServer(report);
+        }
+      } finally {
+        reportRestoreInFlight = false;
+      }
     }
 
     async function loadSharedStateFromServer() {
@@ -2287,7 +2314,10 @@
       if (Array.isArray(result.locations)) locations = result.locations;
       if (Array.isArray(result.routes)) savedRoutes = result.routes;
       if (isAdminUser() && Array.isArray(result.reports)) {
-        publishedChecklists = result.reports;
+        const localReports = await readReportBackupsFromDevice();
+        publishedChecklists = mergeReports(result.reports, localReports, publishedChecklists);
+        persistReportBackups(publishedChecklists);
+        restoreMissingReportsToServer(localReports, result.reports);
       }
       if (isAdminUser() && Array.isArray(result.users)) systemUsers = result.users;
 
@@ -2466,6 +2496,8 @@
     let editingRouteLocationIds = null;
     let syncTimer = null;
     let pendingSyncTimer = null;
+    let draftSaveTimer = null;
+    let reportRestoreInFlight = false;
     let lastSyncKey = "";
     let scannerStream = null;
     let scannerTimer = null;
@@ -2498,15 +2530,25 @@
       return String(currentUser?.username || currentUser?.name || "usuario").trim().toLowerCase();
     }
 
+    function activeDraftId() {
+      return `draft:${currentUserKey()}`;
+    }
+
     function openPendingDb() {
       if (!("indexedDB" in window)) return Promise.resolve(null);
       if (pendingDbPromise) return pendingDbPromise;
       pendingDbPromise = new Promise(resolve => {
-        const request = indexedDB.open("unico-checklist-offline", 1);
+        const request = indexedDB.open("unico-checklist-offline", 2);
         request.onupgradeneeded = event => {
           const db = event.target.result;
           if (!db.objectStoreNames.contains("pendingPublishes")) {
             db.createObjectStore("pendingPublishes", { keyPath: "id" });
+          }
+          if (!db.objectStoreNames.contains("mobileDrafts")) {
+            db.createObjectStore("mobileDrafts", { keyPath: "id" });
+          }
+          if (!db.objectStoreNames.contains("reportBackups")) {
+            db.createObjectStore("reportBackups", { keyPath: "id" });
           }
         };
         request.onsuccess = event => resolve(event.target.result);
@@ -2569,11 +2611,149 @@
       renderPublishStatus();
     }
 
+    function reportSortValue(report) {
+      const updated = Date.parse(report?.updatedAt || report?.finishedAt || report?.createdAt || "");
+      if (Number.isFinite(updated)) return updated;
+      const digits = String(report?.id || "").replace(/\D/g, "");
+      return digits ? Number(digits) : 0;
+    }
+
+    function mergeReports(...lists) {
+      const merged = new Map();
+      lists.flat().filter(Boolean).forEach(report => {
+        const id = String(report.id || "").trim();
+        if (!id) return;
+        merged.set(id, {
+          ...(merged.get(id) || {}),
+          ...report,
+          id
+        });
+      });
+      return [...merged.values()].sort((a, b) => reportSortValue(b) - reportSortValue(a));
+    }
+
+    async function readReportBackupsFromDevice() {
+      const db = await openPendingDb();
+      if (!db) return [];
+      return new Promise(resolve => {
+        const tx = db.transaction("reportBackups", "readonly");
+        const request = tx.objectStore("reportBackups").getAll();
+        request.onsuccess = () => resolve((request.result || []).map(entry => entry.report).filter(Boolean));
+        request.onerror = () => resolve([]);
+      });
+    }
+
+    async function persistReportBackups(reports) {
+      const db = await openPendingDb();
+      if (!db || !Array.isArray(reports)) return false;
+      return new Promise(resolve => {
+        const tx = db.transaction("reportBackups", "readwrite");
+        const store = tx.objectStore("reportBackups");
+        reports.forEach(report => {
+          if (!report?.id) return;
+          store.put({
+            id: String(report.id),
+            owner: currentUserKey(),
+            report,
+            updatedAt: new Date().toISOString()
+          });
+        });
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      });
+    }
+
+    async function persistReportBackup(report) {
+      return persistReportBackups([report]);
+    }
+
+    async function removeReportBackupFromDevice(id) {
+      const db = await openPendingDb();
+      if (!db) return false;
+      return new Promise(resolve => {
+        const tx = db.transaction("reportBackups", "readwrite");
+        tx.objectStore("reportBackups").delete(String(id));
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      });
+    }
+
+    function currentMobileDraft() {
+      if (!selectedRouteId) return null;
+      return {
+        id: activeDraftId(),
+        owner: currentUserKey(),
+        selectedRouteId,
+        selectedLocationId,
+        mobileStepIndex,
+        mobileAnswers,
+        pendingPhotoReview,
+        updatedAt: new Date().toISOString()
+      };
+    }
+
+    async function saveMobileDraftNow() {
+      const draft = currentMobileDraft();
+      if (!draft) return false;
+      const db = await openPendingDb();
+      if (!db) return false;
+      return new Promise(resolve => {
+        const tx = db.transaction("mobileDrafts", "readwrite");
+        tx.objectStore("mobileDrafts").put(draft);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      });
+    }
+
+    function scheduleMobileDraftSave() {
+      if (!currentUser || !selectedRouteId) return;
+      if (draftSaveTimer) clearTimeout(draftSaveTimer);
+      draftSaveTimer = setTimeout(() => {
+        draftSaveTimer = null;
+        saveMobileDraftNow();
+      }, 180);
+    }
+
+    async function clearMobileDraft() {
+      if (draftSaveTimer) clearTimeout(draftSaveTimer);
+      draftSaveTimer = null;
+      const db = await openPendingDb();
+      if (!db) return false;
+      return new Promise(resolve => {
+        const tx = db.transaction("mobileDrafts", "readwrite");
+        tx.objectStore("mobileDrafts").delete(activeDraftId());
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      });
+    }
+
+    async function restoreMobileDraft() {
+      const db = await openPendingDb();
+      if (!db) return false;
+      const draft = await new Promise(resolve => {
+        const tx = db.transaction("mobileDrafts", "readonly");
+        const request = tx.objectStore("mobileDrafts").get(activeDraftId());
+        request.onsuccess = () => resolve(request.result || null);
+        request.onerror = () => resolve(null);
+      });
+      if (!draft?.selectedRouteId) return false;
+      const route = routeOptions().find(option => String(option.id) === String(draft.selectedRouteId));
+      if (!route) return false;
+      const locationIds = (route.locations || []).map(location => Number(location.id));
+      selectedRouteId = route.id;
+      selectedLocationId = locationIds.includes(Number(draft.selectedLocationId))
+        ? Number(draft.selectedLocationId)
+        : ((route.locations || []).length === 1 ? route.locations[0].id : null);
+      mobileStepIndex = Number(draft.mobileStepIndex || 0);
+      mobileAnswers = draft.mobileAnswers || {};
+      pendingPhotoReview = draft.pendingPhotoReview || null;
+      autoOpenPhotoRequest = null;
+      return true;
+    }
+
     function setView(id) {
       if (!isAdminUser() && id !== "mobile") id = "mobile";
-      if (id === "mobile") {
-        resetMobileChecklistState({ clearRoute: true });
-      } else if (id === "dashboard" && currentUser) {
+      if (id === "dashboard" && currentUser) {
         loadPublishedChecklists();
       }
       views.forEach(view => view.classList.toggle("active", view.id === id));
@@ -2655,9 +2835,10 @@
       byId("loginError").textContent = "";
       byId("loginScreen").hidden = true;
       byId("appShell").hidden = false;
-      applyAccessControl();
       await Promise.all([loadLocationsFromServer(), loadSavedRoutesFromServer()]);
       await loadPendingPublishes();
+      await restoreMobileDraft();
+      applyAccessControl();
       if (isAdminUser()) {
         loadPublishedChecklists();
         loadSystemUsers();
@@ -2682,9 +2863,10 @@
       currentUser = result.user;
       byId("loginScreen").hidden = true;
       byId("appShell").hidden = false;
-      applyAccessControl();
       await Promise.all([loadLocationsFromServer(), loadSavedRoutesFromServer()]);
       await loadPendingPublishes();
+      await restoreMobileDraft();
+      applyAccessControl();
       if (isAdminUser()) {
         loadPublishedChecklists();
         loadSystemUsers();
@@ -2696,6 +2878,7 @@
     }
 
     async function logout() {
+      await saveMobileDraftNow();
       await fetch("/api/logout", { method: "POST" }).catch(() => {});
       currentUser = null;
       stopRealtimeSync();
@@ -2780,6 +2963,9 @@
     }
 
     function resetMobileChecklistState(options = {}) {
+      if (draftSaveTimer) clearTimeout(draftSaveTimer);
+      draftSaveTimer = null;
+      if (options.clearDraft) clearMobileDraft();
       if (options.clearRoute) selectedRouteId = null;
       selectedLocationId = null;
       mobileStepIndex = 0;
@@ -3080,6 +3266,7 @@
           mobileAnswers = {};
           pendingPhotoReview = null;
           autoOpenPhotoRequest = null;
+          scheduleMobileDraftSave();
           renderRoutePicker();
           renderLocationPicker();
           renderMobileItems();
@@ -3121,6 +3308,7 @@
           mobileAnswers = {};
           pendingPhotoReview = null;
           autoOpenPhotoRequest = null;
+          scheduleMobileDraftSave();
           renderRoutePicker();
           renderLocationPicker();
           renderMobileItems();
@@ -3486,6 +3674,7 @@
             autoOpenPhotoRequest = { itemId: item.id, answerKey };
           }
           pendingPhotoReview = null;
+          scheduleMobileDraftSave();
           renderMobileItems();
         });
       }
@@ -3496,6 +3685,7 @@
             autoOpenPhotoRequest = { itemId: item.id, answerKey };
           }
           pendingPhotoReview = null;
+          scheduleMobileDraftSave();
           renderMobileItems();
         });
       }
@@ -3517,6 +3707,7 @@
             } else {
               pendingPhotoReview = { itemId: item.id, answerKey, countAsValue, source, photo, max, min };
             }
+            scheduleMobileDraftSave();
             renderMobileItems();
           } finally {
             event.target.value = "";
@@ -3535,6 +3726,7 @@
         ...(countAsValue ? { value: current.length } : {}),
         [answerKey]: current
       };
+      scheduleMobileDraftSave();
       return current.length;
     }
 
@@ -3564,15 +3756,10 @@
             <h3>Checklist concluido</h3>
             <p>Todas as perguntas obrigatorias foram preenchidas. Revise as informacoes e publique para enviar ao historico.</p>
             <button class="btn primary" data-publish-mobile>Publicar Checklist</button>
-            <button class="btn" style="margin-top:8px;" data-restart-mobile>Iniciar novamente</button>
           </article>
         `;
         target.querySelector("[data-publish-mobile]").addEventListener("click", () => {
           byId("publishModal").classList.add("open");
-        });
-        target.querySelector("[data-restart-mobile]").addEventListener("click", () => {
-          resetMobileChecklistState();
-          renderMobileItems();
         });
         return;
       }
@@ -3676,6 +3863,7 @@
       back.disabled = mobileStepIndex === 0;
       back.addEventListener("click", () => {
         if (mobileStepIndex > 0) mobileStepIndex -= 1;
+        scheduleMobileDraftSave();
         renderMobileItems();
       });
       const next = document.createElement("button");
@@ -3688,6 +3876,7 @@
           return;
         }
         mobileStepIndex += 1;
+        scheduleMobileDraftSave();
         renderMobileItems();
       });
       actions.append(back, next);
@@ -3799,6 +3988,7 @@
           drawing = true;
           if (canvas.dataset.signatureId) {
             mobileAnswers[canvas.dataset.signatureId] = { ...mobileAnswers[canvas.dataset.signatureId], value: true };
+            scheduleMobileDraftSave();
           }
           const p = point(event);
           ctx.beginPath();
@@ -3821,6 +4011,7 @@
               value: true,
               signatureUrl: canvas.toDataURL("image/png")
             };
+            scheduleMobileDraftSave();
           }
           drawing = false;
         }
@@ -3837,6 +4028,7 @@
             value: true,
             signatureUrl: canvas.toDataURL("image/png")
           };
+          scheduleMobileDraftSave();
           if (document.fullscreenElement) {
             await document.exitFullscreen().catch(() => {});
             if (screen.orientation?.unlock) screen.orientation.unlock();
@@ -3880,6 +4072,7 @@
         if (clear) clear.addEventListener("click", () => {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           if (canvas.dataset.signatureId) mobileAnswers[canvas.dataset.signatureId] = { ...mobileAnswers[canvas.dataset.signatureId], value: false, signatureUrl: "" };
+          scheduleMobileDraftSave();
         });
       });
     }
@@ -3898,6 +4091,7 @@
             const codes = await detector.detect(video).catch(() => []);
             if (codes.length) {
               mobileAnswers[scannerTargetItemId] = { ...mobileAnswers[scannerTargetItemId], value: codes[0].rawValue };
+              scheduleMobileDraftSave();
               closeScanner();
               renderMobileItems();
             }
@@ -4029,6 +4223,8 @@
         branch: activeLocation.name.replace("Unico Logistica - ", ""),
         route: route.title,
         object: "Checklist publicado",
+        createdAt: now.toISOString(),
+        finishedAt: now.toISOString(),
         created: now.toLocaleDateString("pt-BR") + " - " + now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
         finished: now.toLocaleDateString("pt-BR") + " - " + now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
         executor: currentUser?.name || currentUser?.username || "Unico Group",
@@ -4041,7 +4237,7 @@
       confirmButton.disabled = false;
       confirmButton.textContent = "Sim, publicar checklist";
       queueChecklistPublish(report);
-      resetMobileChecklistState({ clearRoute: true });
+      resetMobileChecklistState({ clearRoute: true, clearDraft: true });
       renderMobileItems();
     }
 
@@ -4062,7 +4258,8 @@
         return;
       }
 
-      publishedChecklists = publishedChecklists.filter(item => item.id !== id);
+      publishedChecklists = publishedChecklists.filter(item => String(item.id) !== String(id));
+      await removeReportBackupFromDevice(id);
       byId("reportModal").classList.remove("open");
       renderDashboard();
     }
@@ -4230,6 +4427,8 @@
     });
     byId("logoutButton").addEventListener("click", logout);
     document.querySelectorAll("[data-mobile-logout]").forEach(button => button.addEventListener("click", logout));
+    byId("mobileItems").addEventListener("input", scheduleMobileDraftSave);
+    byId("mobileItems").addEventListener("change", scheduleMobileDraftSave);
     navButtons.forEach(button => button.addEventListener("click", () => setView(button.dataset.view)));
     triggers.forEach(button => button.addEventListener("click", () => {
       const target = button.dataset.viewTrigger;
@@ -4269,6 +4468,12 @@
     });
     window.addEventListener("online", () => {
       if (currentUser) syncAllPendingPublishes();
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) saveMobileDraftNow();
+    });
+    window.addEventListener("pagehide", () => {
+      saveMobileDraftNow();
     });
     byId("historySearch").addEventListener("input", renderDashboard);
     byId("routeTitle").addEventListener("input", () => {
