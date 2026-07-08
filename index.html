@@ -330,43 +330,19 @@
     .top-logo-card {
       width: 248px;
       min-height: 74px;
-      background: #fff;
+      background: #050505;
       display: grid;
       place-items: center;
-      padding: 10px 18px;
+      padding: 8px 16px;
       flex: 0 0 auto;
     }
 
-    .unico-wordmark {
-      position: relative;
-      display: inline-flex;
-      align-items: flex-end;
-      gap: 7px;
-      color: #111;
-      font-weight: 900;
-      font-size: 31px;
-      line-height: .85;
-      letter-spacing: .02em;
-      font-style: italic;
-      white-space: nowrap;
-    }
-
-    .unico-chevron {
-      color: var(--brand);
-      font-size: 34px;
-      line-height: .72;
-      transform: skewX(-12deg);
-    }
-
-    .unico-group {
-      position: absolute;
-      right: 0;
-      bottom: -12px;
-      color: var(--brand);
-      font-size: 9px;
-      font-weight: 900;
-      letter-spacing: .03em;
-      font-style: italic;
+    .top-logo-card img {
+      width: 100%;
+      max-width: 205px;
+      height: auto;
+      display: block;
+      object-fit: contain;
     }
 
     .topbar-title {
@@ -1715,14 +1691,6 @@
         padding: 10px 12px;
       }
 
-      .unico-wordmark {
-        font-size: clamp(22px, 6vw, 29px);
-      }
-
-      .unico-chevron {
-        font-size: clamp(25px, 6vw, 32px);
-      }
-
       .topbar-title {
         min-height: 72px;
         padding: 0 12px;
@@ -1845,7 +1813,7 @@
     <header class="topbar">
       <div class="header-brand">
         <div class="top-logo-card" aria-label="UNICO Group">
-          <span class="unico-wordmark"><span class="unico-chevron">›</span>ÚNICO<span class="unico-group">GROUP</span></span>
+          <img src="/logo-normal.webp" alt="UNICO Logistica">
         </div>
         <div class="topbar-title">Checklist operacional</div>
         <div class="crumb"><strong>UNICO Logistica LTDA</strong> / Pouso Alegre / Controle operacional</div>
@@ -2472,6 +2440,7 @@
     const modal = document.getElementById("typeModal");
     const typeGrid = document.getElementById("typeGrid");
     const pendingSyncIntervalMs = 20 * 60 * 1000;
+    const savedLoginUserKey = "unicoChecklistSavedUser";
     let pendingDbPromise = null;
 
     function byId(id) {
@@ -2597,6 +2566,31 @@
       setView(isAdmin ? "dashboard" : "mobile");
     }
 
+    function savedLoginUser() {
+      try {
+        return localStorage.getItem(savedLoginUserKey) || "";
+      } catch {
+        return "";
+      }
+    }
+
+    function setSavedLoginUser(username, remember) {
+      try {
+        if (remember && username) {
+          localStorage.setItem(savedLoginUserKey, username);
+        } else {
+          localStorage.removeItem(savedLoginUserKey);
+        }
+      } catch {}
+    }
+
+    function applySavedLoginUser() {
+      const saved = savedLoginUser();
+      if (!saved) return;
+      byId("loginUser").value = saved;
+      byId("rememberLogin").checked = true;
+    }
+
     async function login(username, password, remember) {
       const response = await fetch("/api/login", {
         method: "POST",
@@ -2614,6 +2608,7 @@
         return;
       }
       currentUser = result.user;
+      setSavedLoginUser(username, remember);
       byId("loginError").textContent = "";
       byId("loginScreen").hidden = true;
       byId("appShell").hidden = false;
@@ -2636,6 +2631,7 @@
       if (!result.user) {
         byId("appShell").hidden = true;
         byId("loginScreen").hidden = false;
+        applySavedLoginUser();
         byId("loginUser").focus();
         return;
       }
@@ -2665,6 +2661,7 @@
       resetMobileChecklistState({ clearRoute: true });
       pendingPublishes = [];
       byId("loginForm").reset();
+      applySavedLoginUser();
       byId("appShell").hidden = true;
       byId("loginScreen").hidden = false;
       byId("loginUser").focus();
@@ -4263,6 +4260,7 @@
       renderAll();
     });
 
+    applySavedLoginUser();
     restoreSession();
   </script>
 </body>
