@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const fs = require("fs");
+const https = require("https");
 const http = require("http");
 const path = require("path");
 
@@ -17,6 +18,12 @@ const publicFiles = {
 };
 const sessions = new Map();
 const databaseUrl = process.env.DATABASE_URL || "";
+const cloudinaryConfig = {
+  cloudName: process.env.CLOUDINARY_CLOUD_NAME || "",
+  apiKey: process.env.CLOUDINARY_API_KEY || "",
+  apiSecret: process.env.CLOUDINARY_API_SECRET || "",
+  folder: process.env.CLOUDINARY_FOLDER || "unico-checklist"
+};
 let pgPool = null;
 let reportTableReady = null;
 
@@ -433,6 +440,148 @@ function cloneData(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function cloudinaryReady() {
+  return Boolean(cloudinaryConfig.cloudName && cloudinaryConfig.apiKey && cloudinaryConfig.apiSecret);
+}
+
+function isDataUrl(value) {
+  return typeof value === "string" && /^data:image\/[a-z0-9.+-]+;base64,/i.test(value);
+}
+
+function safeCloudinaryPart(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "arquivo";
+}
+
+function signCloudinaryParams(params) {
+  const payload = Object.keys(params)
+    .filter(key => params[key] !== undefined && params[key] !== null && params[key] !== "")
+    .sort()
+    .map(key => `${key}=${params[key]}`)
+    .join("&");
+  return crypto.createHash("sha1").update(payload + cloudinaryConfig.apiSecret).digest("hex");
+}
+
+function cloudinaryUpload(dataUrl, options = {}) {
+  if (!cloudinaryReady() || !isDataUrl(dataUrl)) return Promise.resolve(null);
+
+  const timestamp = Math.floor(Date.now() / 1000);
+  const uploadParams = {
+    folder: options.folder,
+    public_id: options.publicId,
+    timestamp,
+    overwrite: "true"
+  };
+  const signature = signCloudinaryParams(uploadParams);
+  const form = new URLSearchParams({
+    file: dataUrl,
+    api_key: cloudinaryConfig.apiKey,
+    signature,
+    ...Object.fromEntries(Object.entries(uploadParams).map(([key, value]) => [key, String(value)]))
+  }).toString();
+
+  return new Promise((resolve, reject) => {
+    const request = https.request({
+      method: "POST",
+      hostname: "api.cloudinary.com",
+      path: `/v1_1/${encodeURIComponent(cloudinaryConfig.cloudName)}/image/upload`,
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Content-Length": Buffer.byteLength(form)
+      }
+    }, response => {
+      let body = "";
+      response.on("data", chunk => body += chunk);
+      response.on("end", () => {
+        let parsed = {};
+        try {
+          parsed = JSON.parse(body || "{}");
+        } catch (error) {}
+
+        if (response.statusCode >= 200 && response.statusCode < 300 && parsed.secure_url) {
+          resolve({
+            url: parsed.secure_url,
+            secureUrl: parsed.secure_url,
+            publicId: parsed.public_id,
+            width: parsed.width,
+            height: parsed.height,
+            bytes: parsed.bytes,
+            format: parsed.format,
+            resourceType: parsed.resource_type,
+            provider: "cloudinary"
+          });
+          return;
+        }
+
+        reject(new Error(parsed.error?.message || `Cloudinary retornou status ${response.statusCode}`));
+      });
+    });
+
+    request.on("error", reject);
+    request.write(form);
+    request.end();
+  });
+}
+
+async function uploadReportImages(report) {
+  if (!cloudinaryReady()) return report;
+
+  const next = cloneData(report);
+  const answers = next.answers || {};
+  const reportFolder = `${cloudinaryConfig.folder}/${safeCloudinaryPart(next.id)}`;
+  let uploadIndex = 0;
+
+  async function uploadPhoto(photo, prefix) {
+    if (!photo || !isDataUrl(photo.url)) return photo;
+    uploadIndex += 1;
+    const uploaded = await cloudinaryUpload(photo.url, {
+      folder: reportFolder,
+      publicId: `${safeCloudinaryPart(prefix)}-${String(uploadIndex).padStart(3, "0")}`
+    });
+    if (!uploaded) return photo;
+    return {
+      ...photo,
+      url: uploaded.secureUrl,
+      cloudinaryUrl: uploaded.secureUrl,
+      cloudinaryPublicId: uploaded.publicId,
+      width: uploaded.width || photo.width,
+      height: uploaded.height || photo.height,
+      size: uploaded.bytes || photo.size,
+      format: uploaded.format,
+      provider: "cloudinary",
+      quality: "original-cloudinary"
+    };
+  }
+
+  for (const [answerId, answer] of Object.entries(answers)) {
+    if (!answer || typeof answer !== "object") continue;
+    if (Array.isArray(answer.photos)) {
+      answer.photos = await Promise.all(answer.photos.map((photo, index) => uploadPhoto(photo, `pergunta-${answerId}-foto-${index + 1}`)));
+    }
+    if (Array.isArray(answer.evidencePhotos)) {
+      answer.evidencePhotos = await Promise.all(answer.evidencePhotos.map((photo, index) => uploadPhoto(photo, `pergunta-${answerId}-evidencia-${index + 1}`)));
+    }
+    if (isDataUrl(answer.signatureUrl)) {
+      const uploaded = await cloudinaryUpload(answer.signatureUrl, {
+        folder: reportFolder,
+        publicId: `pergunta-${safeCloudinaryPart(answerId)}-assinatura`
+      });
+      if (uploaded) {
+        answer.signatureUrl = uploaded.secureUrl;
+        answer.signatureCloudinaryPublicId = uploaded.publicId;
+      }
+    }
+  }
+
+  next.mediaProvider = "cloudinary";
+  next.mediaUploadedAt = new Date().toISOString();
+  return next;
+}
+
 function sendJson(response, status, body, headers = {}) {
   response.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
@@ -810,11 +959,17 @@ const server = http.createServer(async (request, response) => {
         return sendJson(response, 400, { error: "Checklist invalido." });
       }
 
-      const report = {
-        ...payload,
-        id: String(payload.id || Date.now()),
-        executor: payload.executor || session.name || session.username
-      };
+      let report;
+      try {
+        report = await uploadReportImages({
+          ...payload,
+          id: String(payload.id || Date.now()),
+          executor: payload.executor || session.name || session.username
+        });
+      } catch (error) {
+        console.error("Nao foi possivel enviar midias para o Cloudinary:", error.message);
+        return sendJson(response, 502, { error: "Nao foi possivel enviar fotos para o Cloudinary. O checklist ficara pendente para tentar novamente." });
+      }
       const reports = (await readReports()).filter(item => String(item.id) !== report.id);
       reports.unshift(report);
       await writeReports(reports);
