@@ -1024,6 +1024,12 @@ function canAccessReport(session, report) {
   return String(report.executorUsername || "").toLowerCase() === username;
 }
 
+function reportsForSession(session, reports) {
+  const list = Array.isArray(reports) ? reports : [];
+  if (isAdminSession(session)) return list;
+  return list.filter(report => canAccessReport(session, report));
+}
+
 function parseCookies(request) {
   return Object.fromEntries((request.headers.cookie || "").split(";").filter(Boolean).map(cookie => {
     const [key, ...value] = cookie.trim().split("=");
@@ -1248,11 +1254,12 @@ const server = http.createServer(async (request, response) => {
   if (pathname === "/api/sync") {
     const session = currentSession(request);
     if (!session) return sendJson(response, 401, { error: "Sessao expirada." });
+    const reports = await readReports();
 
     const body = {
       locations: readLocations(),
       routes: readRoutes(),
-      reports: isAdminSession(session) ? await readReports() : [],
+      reports: reportsForSession(session, reports),
       users: isAdminSession(session) ? allUsers().map(publicUser) : []
     };
     return sendJson(response, 200, body);
@@ -1383,7 +1390,8 @@ const server = http.createServer(async (request, response) => {
     if (!session) return sendJson(response, 401, { error: "Sessao expirada." });
 
     if (request.method === "GET") {
-      return sendJson(response, 200, { reports: await readReports() });
+      const reports = await readReports();
+      return sendJson(response, 200, { reports: reportsForSession(session, reports) });
     }
 
     if (request.method === "POST") {

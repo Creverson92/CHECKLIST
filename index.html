@@ -2449,6 +2449,9 @@
 
       publishedChecklists = mergeReports([savedReport], publishedChecklists);
       persistReportBackup(savedReport);
+      selectedHistoryBranch = "";
+      const search = byId("historySearch");
+      if (search) search.value = "";
       renderDashboard();
       return savedReport;
     }
@@ -2484,7 +2487,7 @@
 
       if (Array.isArray(result.locations)) locations = result.locations;
       if (Array.isArray(result.routes)) savedRoutes = result.routes;
-      if (isAdminUser() && Array.isArray(result.reports)) {
+      if (Array.isArray(result.reports)) {
         const localReports = await readReportBackupsFromDevice();
         publishedChecklists = mergeReports(result.reports, localReports, publishedChecklists);
         persistReportBackups(publishedChecklists);
@@ -2815,7 +2818,19 @@
       return new Promise(resolve => {
         const tx = db.transaction("reportBackups", "readonly");
         const request = tx.objectStore("reportBackups").getAll();
-        request.onsuccess = () => resolve((request.result || []).map(entry => entry.report).filter(Boolean));
+        request.onsuccess = () => {
+          const owner = currentUserKey();
+          const allowAll = isAdminUser();
+          const reports = (request.result || [])
+            .filter(entry => {
+              if (!entry?.report) return false;
+              if (allowAll) return true;
+              const reportOwner = String(entry.owner || entry.report.executorUsername || entry.report.executor || "").toLowerCase();
+              return reportOwner === owner;
+            })
+            .map(entry => entry.report);
+          resolve(reports);
+        };
         request.onerror = () => resolve([]);
       });
     }
@@ -3016,8 +3031,8 @@
       await loadPendingPublishes();
       await restoreMobileDraft();
       applyAccessControl();
+      loadPublishedChecklists();
       if (isAdminUser()) {
-        loadPublishedChecklists();
         loadSystemUsers();
       }
       loadSharedStateFromServer();
@@ -3044,8 +3059,8 @@
       await loadPendingPublishes();
       await restoreMobileDraft();
       applyAccessControl();
+      loadPublishedChecklists();
       if (isAdminUser()) {
-        loadPublishedChecklists();
         loadSystemUsers();
       }
       loadSharedStateFromServer();
@@ -4584,6 +4599,9 @@
       await persistPendingPublish(entry);
       const savedReport = await saveReportToServer(entry.report);
       if (savedReport) {
+        await loadPublishedChecklists();
+        lastSyncKey = "";
+        loadSharedStateFromServer();
         entry.status = "done";
         entry.message = "Publicado com sucesso no historico.";
         await removePendingPublishFromDevice(entry.id);
