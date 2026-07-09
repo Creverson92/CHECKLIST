@@ -2429,16 +2429,24 @@
     }
 
     async function postReportToServer(report) {
+      lastPublishError = "";
       const response = await fetch("/api/reports", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(report)
       }).catch(() => null);
 
-      if (!response || !response.ok) return null;
+      if (!response || !response.ok) {
+        const result = response ? await response.json().catch(() => ({})) : {};
+        lastPublishError = result.error || "Nao foi possivel confirmar a publicacao no servidor.";
+        return null;
+      }
 
       const result = await response.json().catch(() => ({}));
-      if (!result.report) return null;
+      if (!result.report) {
+        lastPublishError = "O servidor respondeu sem o checklist salvo.";
+        return null;
+      }
 
       return result.report;
     }
@@ -2673,6 +2681,7 @@
     let pendingSyncTimer = null;
     let draftSaveTimer = null;
     let reportRestoreInFlight = false;
+    let lastPublishError = "";
     let lastSyncKey = "";
     let scannerStream = null;
     let scannerTimer = null;
@@ -4614,9 +4623,9 @@
         return;
       }
       entry.status = "pending";
-      entry.message = navigator.onLine === false
+      entry.message = lastPublishError || (navigator.onLine === false
         ? "Pendente de sincronizacao. Sem internet neste aparelho."
-        : "Pendente de sincronizacao. Toque em Sincronizar ou aguarde a tentativa automatica.";
+        : "Pendente de sincronizacao. Toque em Sincronizar ou aguarde a tentativa automatica.");
       await persistPendingPublish(entry);
       renderPublishStatus();
     }

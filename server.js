@@ -19,6 +19,7 @@ const publicFiles = {
 const logoPath = path.join(__dirname, "logo-normal.webp");
 const sessions = new Map();
 const databaseUrl = process.env.DATABASE_URL || "";
+const requireDatabaseForReports = process.env.REQUIRE_DATABASE_FOR_REPORTS === "true";
 const cloudinaryConfig = {
   cloudName: process.env.CLOUDINARY_CLOUD_NAME || "",
   apiKey: process.env.CLOUDINARY_API_KEY || "",
@@ -29,6 +30,10 @@ let pgPool = null;
 let reportTableReady = null;
 let PDFDocument = null;
 let sharpImage = null;
+
+function reportDatabaseRequired() {
+  return requireDatabaseForReports;
+}
 
 function getPdfDocument() {
   if (PDFDocument) return PDFDocument;
@@ -1173,16 +1178,25 @@ async function writeReportsToDatabase(reports) {
 async function readReports() {
   const databaseReports = await readReportsFromDatabase();
   if (Array.isArray(databaseReports)) return databaseReports;
+  if (reportDatabaseRequired()) return [];
   return readReportsFromFile();
 }
 
 async function writeReports(reports) {
+  if (reportDatabaseRequired()) {
+    const savedInDatabase = await writeReportsToDatabase(reports);
+    if (!savedInDatabase) return false;
+    writeReportsToFile(reports);
+    return true;
+  }
+
   const savedInDatabase = await writeReportsToDatabase(reports);
   if (savedInDatabase) {
     writeReportsToFile(reports);
-    return;
+    return true;
   }
   writeReportsToFile(reports);
+  return true;
 }
 
 function readRoutes() {
@@ -1399,6 +1413,11 @@ const server = http.createServer(async (request, response) => {
       if (!payload || typeof payload !== "object") {
         return sendJson(response, 400, { error: "Checklist invalido." });
       }
+      if (reportDatabaseRequired() && !databaseUrl) {
+        return sendJson(response, 503, {
+          error: "Banco de dados permanente nao configurado no Render. Configure a variavel DATABASE_URL para salvar o historico."
+        });
+      }
 
       let report;
       try {
@@ -1415,7 +1434,12 @@ const server = http.createServer(async (request, response) => {
       }
       const reports = (await readReports()).filter(item => String(item.id) !== report.id);
       reports.unshift(report);
-      await writeReports(reports);
+      const saved = await writeReports(reports);
+      if (!saved) {
+        return sendJson(response, 503, {
+          error: "Nao foi possivel gravar o checklist no banco permanente. Ele ficou pendente para nova sincronizacao."
+        });
+      }
       return sendJson(response, 201, { report });
     }
   }
