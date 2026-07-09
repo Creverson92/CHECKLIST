@@ -4712,7 +4712,7 @@
       const routeItems = selectedRouteItems();
       const activeLocation = route.locations.find(location => location.id === selectedLocationId) || route.locations[0];
       const now = new Date();
-      const id = String(Date.now()).slice(-10);
+      const id = `${Date.now()}${Math.floor(Math.random() * 1000).toString().padStart(3, "0")}`;
       const report = {
         id,
         division: "Sul de Minas",

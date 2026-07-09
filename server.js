@@ -1189,6 +1189,44 @@ async function writeReportsToDatabase(reports) {
   }
 }
 
+async function upsertReportToDatabase(report) {
+  try {
+    if (!report?.id || !await ensureReportTable()) return false;
+    await pgPool.query(
+      `INSERT INTO checklist_reports (id, report, created_at, updated_at)
+       VALUES ($1, $2::jsonb, COALESCE($3::timestamptz, NOW()), NOW())
+       ON CONFLICT (id) DO UPDATE SET report = EXCLUDED.report, updated_at = NOW()`,
+      [String(report.id), JSON.stringify(report), report.createdAt || report.finishedAt || null]
+    );
+    return true;
+  } catch (error) {
+    console.error("Nao foi possivel gravar checklist individual no banco:", error.message);
+    return false;
+  }
+}
+
+async function deleteReportFromDatabase(id) {
+  try {
+    if (!id || !await ensureReportTable()) return false;
+    await pgPool.query("DELETE FROM checklist_reports WHERE id = $1", [String(id)]);
+    return true;
+  } catch (error) {
+    console.error("Nao foi possivel excluir checklist no banco:", error.message);
+    return false;
+  }
+}
+
+function upsertReportInFile(report) {
+  if (!report?.id) return;
+  const reports = readReportsFromFile().filter(item => String(item.id) !== String(report.id));
+  reports.unshift(report);
+  writeReportsToFile(reports);
+}
+
+function deleteReportFromFile(id) {
+  writeReportsToFile(readReportsFromFile().filter(item => String(item.id) !== String(id)));
+}
+
 async function readReports() {
   const databaseReports = await readReportsFromDatabase();
   if (Array.isArray(databaseReports)) return databaseReports;
@@ -1210,6 +1248,32 @@ async function writeReports(reports) {
     return true;
   }
   writeReportsToFile(reports);
+  return true;
+}
+
+async function saveReport(report) {
+  if (reportDatabaseRequired()) {
+    const savedInDatabase = await upsertReportToDatabase(report);
+    if (!savedInDatabase) return false;
+    upsertReportInFile(report);
+    return true;
+  }
+
+  const savedInDatabase = await upsertReportToDatabase(report);
+  upsertReportInFile(report);
+  return savedInDatabase || true;
+}
+
+async function deleteReport(id) {
+  if (reportDatabaseRequired()) {
+    const deletedFromDatabase = await deleteReportFromDatabase(id);
+    if (!deletedFromDatabase) return false;
+    deleteReportFromFile(id);
+    return true;
+  }
+
+  await deleteReportFromDatabase(id);
+  deleteReportFromFile(id);
   return true;
 }
 
@@ -1447,9 +1511,7 @@ const server = http.createServer(async (request, response) => {
         console.error("Nao foi possivel enviar midias para o Cloudinary:", error.message);
         return sendJson(response, 502, { error: "Nao foi possivel enviar fotos para o Cloudinary. O checklist ficara pendente para tentar novamente." });
       }
-      const reports = (await readReports()).filter(item => String(item.id) !== report.id);
-      reports.unshift(report);
-      const saved = await writeReports(reports);
+      const saved = await saveReport(report);
       if (!saved) {
         return sendJson(response, 503, {
           error: "Nao foi possivel gravar o checklist no banco permanente. Ele ficou pendente para nova sincronizacao."
@@ -1487,7 +1549,8 @@ const server = http.createServer(async (request, response) => {
     if (!isAdminSession(session)) return sendJson(response, 403, { error: "Acesso negado." });
 
     const id = decodeURIComponent(pathname.replace("/api/reports/", ""));
-    await writeReports((await readReports()).filter(item => String(item.id) !== id));
+    const deleted = await deleteReport(id);
+    if (!deleted) return sendJson(response, 503, { error: "Nao foi possivel excluir o checklist no banco permanente." });
     return sendJson(response, 200, { ok: true });
   }
 
