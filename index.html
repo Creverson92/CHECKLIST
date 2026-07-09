@@ -95,6 +95,10 @@
       display: none;
     }
 
+    [hidden] {
+      display: none !important;
+    }
+
     body.role-app .nav-button:not([data-view="mobile"]),
     body.role-app [data-view-trigger]:not([data-view-trigger="mobile"]) {
       display: none;
@@ -3420,6 +3424,7 @@
           const removed = await deleteLocationFromServer(location.id);
           if (!removed) return;
           if (Number(editingLocationId) === Number(location.id)) resetLocationForm();
+          locations = locations.filter(item => Number(item.id) !== Number(location.id));
           await loadSharedStateFromServer();
           renderAll();
         });
@@ -5124,6 +5129,8 @@
       };
       const serverLocation = await saveLocationToServer(location);
       if (!serverLocation) return;
+      locations = locations.filter(item => Number(item.id) !== Number(serverLocation.id));
+      locations.push(serverLocation);
       await loadSharedStateFromServer();
       resetLocationForm();
       renderAll();
