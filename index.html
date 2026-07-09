@@ -1538,6 +1538,26 @@
       border: 1px solid var(--line);
       font-size: 14px;
       line-height: 1.45;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .checklist-report::before {
+      content: "UNICO LOGISTICA";
+      position: absolute;
+      inset: 40% auto auto 50%;
+      transform: translate(-50%, -50%) rotate(-32deg);
+      color: rgba(227, 6, 19, .045);
+      font-size: clamp(42px, 9vw, 92px);
+      font-weight: 900;
+      white-space: nowrap;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .checklist-report > * {
+      position: relative;
+      z-index: 1;
     }
 
     .report-cover {
@@ -1558,8 +1578,7 @@
       width: 178px;
       height: auto;
       display: block;
-      background: #050505;
-      padding: 4px 6px;
+      object-fit: contain;
     }
 
     .report-brand-mark {
@@ -1726,10 +1745,15 @@
     }
 
     .report-footer {
-      color: #8a8f94;
-      border-top: 1px solid var(--line);
-      padding: 10px 28px;
+      color: #f3f3f3;
+      background: #111;
+      border-top: 3px solid var(--brand);
+      padding: 12px 28px;
       font-size: 12px;
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      flex-wrap: wrap;
     }
 
     .empty-state {
@@ -4135,13 +4159,78 @@
     function photoMeta(photo) {
       const resolution = photo.width && photo.height ? `${photo.width} x ${photo.height}px` : "resolucao original";
       const size = photo.size ? `${(photo.size / 1024 / 1024).toFixed(1)} MB` : "tamanho original";
-      const quality = photo.quality === "original" ? "qualidade original" : "sem redimensionamento";
+      const quality = ["original", "camera-original", "original-cloudinary"].includes(photo.quality)
+        ? "qualidade original"
+        : (photo.quality === "alta-qualidade" ? "alta qualidade" : "sem redimensionamento");
       return `${resolution} - ${size} - ${quality}`;
     }
 
     function dataUrlSize(dataUrl) {
       const base64 = String(dataUrl || "").split(",")[1] || "";
       return Math.max(0, Math.floor((base64.length * 3) / 4));
+    }
+
+    function blobToDataUrl(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(reader.error);
+        reader.onload = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    function imageSizeFromUrl(url) {
+      return new Promise(resolve => {
+        const image = new Image();
+        image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
+        image.onerror = () => resolve({ width: 0, height: 0 });
+        image.src = url;
+      });
+    }
+
+    async function captureHighQualityPhoto(video) {
+      if ("ImageCapture" in window && photoCameraTrack) {
+        try {
+          const imageCapture = new ImageCapture(photoCameraTrack);
+          const capabilities = await imageCapture.getPhotoCapabilities?.().catch(() => null);
+          const options = {};
+          if (capabilities?.imageWidth?.max) options.imageWidth = capabilities.imageWidth.max;
+          if (capabilities?.imageHeight?.max) options.imageHeight = capabilities.imageHeight.max;
+          if (photoTorchOn && Array.isArray(capabilities?.fillLightMode) && capabilities.fillLightMode.includes("flash")) {
+            options.fillLightMode = "flash";
+          }
+          const blob = await imageCapture.takePhoto(options);
+          const url = await blobToDataUrl(blob);
+          const dimensions = await imageSizeFromUrl(url);
+          return {
+            url,
+            type: blob.type || "image/jpeg",
+            size: blob.size || dataUrlSize(url),
+            width: dimensions.width,
+            height: dimensions.height,
+            quality: "camera-original"
+          };
+        } catch (error) {
+          byId("photoCameraStatus").textContent = "Captura direta indisponivel. Usando quadro estabilizado da camera.";
+        }
+      }
+
+      const canvas = byId("photoCameraCanvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d", { alpha: false });
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const url = canvas.toDataURL("image/jpeg", 0.97);
+      return {
+        url,
+        type: "image/jpeg",
+        size: dataUrlSize(url),
+        width: canvas.width,
+        height: canvas.height,
+        quality: "alta-qualidade"
+      };
     }
 
     function updatePhotoFlashButton() {
@@ -4175,6 +4264,7 @@
       byId("photoCameraTitle").textContent = `Tirar ${request.title.toLowerCase()}`;
       byId("photoCameraStatus").textContent = "Abrindo camera traseira...";
       byId("photoCameraModal").classList.add("open");
+      byId("capturePhotoButton").textContent = "Capturar foto";
       byId("capturePhotoButton").disabled = true;
       photoTorchOn = false;
       photoTorchSupported = false;
@@ -4194,7 +4284,8 @@
           video: {
             facingMode: { ideal: "environment" },
             width: { ideal: 1920 },
-            height: { ideal: 1080 }
+            height: { ideal: 1080 },
+            frameRate: { ideal: 30 }
           }
         });
         if (photoCameraRequest !== request) {
@@ -4206,6 +4297,16 @@
         video.srcObject = photoCameraStream;
         await video.play().catch(() => {});
         photoCameraTrack = photoCameraStream.getVideoTracks()[0] || null;
+        if (photoCameraTrack) {
+          photoCameraTrack.contentHint = "detail";
+          await photoCameraTrack.applyConstraints({
+            advanced: [
+              { focusMode: "continuous" },
+              { exposureMode: "continuous" },
+              { whiteBalanceMode: "continuous" }
+            ]
+          }).catch(() => {});
+        }
         const capabilities = photoCameraTrack?.getCapabilities?.() || {};
         photoTorchSupported = Boolean(capabilities.torch);
         updatePhotoFlashButton();
@@ -4234,6 +4335,7 @@
       photoTorchOn = false;
       photoTorchSupported = false;
       byId("photoCameraVideo").srcObject = null;
+      byId("capturePhotoButton").textContent = "Capturar foto";
       byId("capturePhotoButton").disabled = false;
       updatePhotoFlashButton();
       byId("photoCameraModal").classList.remove("open");
@@ -4248,31 +4350,33 @@
         return;
       }
 
-      const canvas = byId("photoCameraCanvas");
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const url = canvas.toDataURL("image/jpeg", 0.98);
-      const currentCount = (mobileAnswers[request.item.id]?.[request.answerKey] || []).length;
-      const photo = {
-        name: `${request.title} ${currentCount + 1}.jpg`,
-        url,
-        type: "image/jpeg",
-        size: dataUrlSize(url),
-        width: canvas.width,
-        height: canvas.height,
-        quality: "original",
-        flash: photoTorchOn ? "ligado" : "desligado"
-      };
-      const savedCount = savePhotoAnswer(request.item, request.answerKey, photo, request.countAsValue, request.max);
-      const shouldOpenNext = savedCount < request.max && savedCount < request.min;
-      closePhotoCamera();
-      if (shouldOpenNext) {
-        autoOpenPhotoRequest = { itemId: request.item.id, answerKey: request.answerKey };
+      const captureButton = byId("capturePhotoButton");
+      const previousText = captureButton.textContent;
+      captureButton.disabled = true;
+      captureButton.textContent = "Capturando...";
+      byId("photoCameraStatus").textContent = "Segure firme. Capturando em alta qualidade...";
+
+      try {
+        const currentCount = (mobileAnswers[request.item.id]?.[request.answerKey] || []).length;
+        const captured = await captureHighQualityPhoto(video);
+        const photo = {
+          name: `${request.title} ${currentCount + 1}.jpg`,
+          ...captured,
+          flash: photoTorchOn ? "ligado" : "desligado"
+        };
+        const savedCount = savePhotoAnswer(request.item, request.answerKey, photo, request.countAsValue, request.max);
+        const shouldOpenNext = savedCount < request.max && savedCount < request.min;
+        closePhotoCamera();
+        if (shouldOpenNext) {
+          autoOpenPhotoRequest = { itemId: request.item.id, answerKey: request.answerKey };
+        }
+        scheduleMobileDraftSave();
+        renderMobileItems();
+      } catch (error) {
+        byId("photoCameraStatus").textContent = "Nao foi possivel salvar a foto. Tente novamente segurando o celular firme.";
+        captureButton.disabled = false;
+        captureButton.textContent = previousText;
       }
-      scheduleMobileDraftSave();
-      renderMobileItems();
     }
 
     function setupSignaturePads() {
@@ -4631,7 +4735,7 @@
         const signature = answer.signatureUrl ? `<img class="report-signature" src="${answer.signatureUrl}" alt="Assinatura">` : "";
         return `
           <section class="report-item">
-            <div class="report-icon">▣</div>
+            <div class="report-icon">#</div>
             <div>
               <h3>${index + 1} - ${escapeHtml(item.title)}</h3>
               <p class="report-answer">${escapeHtml(formatAnswerValue(answer))}</p>
@@ -4657,12 +4761,12 @@
 
           <div class="report-section-title">Dados do checklist</div>
           <section class="report-meta-grid">
-            <div class="report-meta-item"><div class="report-icon">▦</div><div><strong>Unidade</strong><span>UNICO Logistica LTDA</span></div></div>
-            <div class="report-meta-item"><div class="report-icon">◷</div><div><strong>Data/hora inicio</strong><span>${escapeHtml(report.created || "Nao informado")}</span></div></div>
-            <div class="report-meta-item"><div class="report-icon">☑</div><div><strong>Data/hora finalizacao</strong><span>${escapeHtml(report.finished || "Nao informado")}</span></div></div>
-            <div class="report-meta-item"><div class="report-icon">⌖</div><div><strong>Localidade</strong><span>${escapeHtml(report.branch || "Nao informado")}</span></div></div>
-            <div class="report-meta-item"><div class="report-icon">◉</div><div><strong>Executor</strong><span>${escapeHtml(report.executor || "Nao informado")}</span></div></div>
-            <div class="report-meta-item"><div class="report-icon">□</div><div><strong>Objeto</strong><span>${escapeHtml(report.object || "Nao informado")}</span></div></div>
+            <div class="report-meta-item"><div class="report-icon">01</div><div><strong>Unidade</strong><span>UNICO Logistica LTDA</span></div></div>
+            <div class="report-meta-item"><div class="report-icon">02</div><div><strong>Data/hora inicio</strong><span>${escapeHtml(report.created || "Nao informado")}</span></div></div>
+            <div class="report-meta-item"><div class="report-icon">03</div><div><strong>Data/hora finalizacao</strong><span>${escapeHtml(report.finished || "Nao informado")}</span></div></div>
+            <div class="report-meta-item"><div class="report-icon">04</div><div><strong>Localidade</strong><span>${escapeHtml(report.branch || "Nao informado")}</span></div></div>
+            <div class="report-meta-item"><div class="report-icon">05</div><div><strong>Executor</strong><span>${escapeHtml(report.executor || "Nao informado")}</span></div></div>
+            <div class="report-meta-item"><div class="report-icon">06</div><div><strong>Objeto</strong><span>${escapeHtml(report.object || "Nao informado")}</span></div></div>
           </section>
 
           <section class="report-items">
@@ -4670,7 +4774,7 @@
             ${rows}
           </section>
 
-          <footer class="report-footer">Checklist ${escapeHtml(report.id)} · Gerado em ${generatedAt}</footer>
+          <footer class="report-footer"><span>Checklist ${escapeHtml(report.id)}</span><span>UNICO Logistica LTDA - Gerado em ${generatedAt}</span></footer>
         </article>
       `;
     }
@@ -4685,55 +4789,12 @@
     function exportReportPdf(id) {
       const report = findReport(id);
       if (!report) return;
-      const win = window.open("", "_blank");
-      win.document.write(`
-        <!doctype html><html><head><title>Checklist ${report.id}</title>
-        <style>
-          @page{size:A4;margin:10mm;}
-          *{box-sizing:border-box;}
-          body{font-family:Arial,sans-serif;color:#24282c;margin:0;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-          .checklist-report{border:1px solid #dfe4e7;font-size:12px;line-height:1.42;color:#24282c;}
-          .report-cover{display:flex;justify-content:space-between;gap:18px;padding:18px 22px;border-bottom:2px solid #cbd5d9;}
-          .report-brand{display:flex;align-items:center;gap:12px;}
-          .report-brand-logo{width:170px;height:auto;display:block;background:#050505;padding:4px 6px;}
-          .report-brand-mark{width:48px;height:48px;display:grid;place-items:center;background:#e30613;color:#fff;font-weight:800;border:2px solid #dfe4e7;}
-          .report-brand strong,.report-checklist-id strong{display:block;color:#111111;font-size:21px;letter-spacing:.02em;}
-          .report-brand span,.report-checklist-id span{display:block;color:#6d757b;margin-top:3px;font-size:11px;}
-          .report-checklist-id{text-align:right;}
-          .report-section-title{padding:11px 22px;color:#24282c;font-size:14px;font-weight:800;text-transform:uppercase;border-bottom:1px solid #dfe4e7;background:#fbfcfd;}
-          .report-meta-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 48px;padding:18px 22px 22px;}
-          .report-meta-item{display:grid;grid-template-columns:22px 1fr;gap:8px;align-items:start;}
-          .report-icon{color:#24282c;font-size:16px;line-height:1.1;}
-          .report-meta-item strong{display:block;color:#24282c;font-size:12px;}
-          .report-items{margin:0 22px 16px;padding:14px 18px 4px;border:1px solid #dfe4e7;border-radius:4px;}
-          .report-items h2{color:#24282c;font-size:14px;margin:0 0 12px;text-transform:uppercase;border-bottom:1px solid #c8ced2;padding-bottom:10px;}
-          .report-item{display:grid;grid-template-columns:24px 1fr;gap:10px;border-bottom:1px solid #e5ecef;padding:12px 0;break-inside:avoid;page-break-inside:avoid;}
-          .report-item:last-child{border-bottom:0;}
-          .report-item h3{color:#24282c;font-size:13px;margin:0 0 8px;text-transform:uppercase;}
-          .report-answer{margin:0 0 8px;color:#24282c;}
-          .report-observation{margin:0 0 8px;color:#24282c;font-size:11px;}
-          .report-photos{display:block;margin-top:10px;}
-          .report-photo-figure{margin:10px 0 16px;padding:7px;border:1px solid #aebbc0;border-radius:4px;background:#fff;break-inside:avoid;page-break-inside:avoid;}
-          .report-photo-figure img{display:block;width:auto;max-width:100%;height:auto;max-height:246mm;object-fit:contain;margin:0 auto;image-rendering:auto;}
-          .report-photo-figure figcaption{color:#6d757b;font-size:10px;margin-top:5px;text-align:center;}
-          .report-photo-figure + .report-photo-figure{break-before:page;page-break-before:always;}
-          .report-item:has(.report-photo-figure){display:block;}
-          .report-item:has(.report-photo-figure)>.report-icon{display:none;}
-          .report-signature{width:300px;max-width:100%;max-height:150px;object-fit:contain;margin-top:6px;display:block;}
-          .report-footer{color:#8a8f94;border-top:1px solid #dfe4e7;padding:8px 22px;font-size:10px;}
-        </style></head><body>${reportHtml(report)}</body></html>
-      `);
-      win.document.close();
-      win.focus();
-      const images = [...win.document.images];
-      const loaded = images.map(image => {
-        if (image.complete) return Promise.resolve();
-        return new Promise(resolve => {
-          image.onload = resolve;
-          image.onerror = resolve;
-        });
-      });
-      Promise.all(loaded).then(() => setTimeout(() => win.print(), 300));
+      const link = document.createElement("a");
+      link.href = `/api/reports/${encodeURIComponent(id)}/pdf`;
+      link.download = `checklist-${id}.pdf`;
+      document.body.append(link);
+      link.click();
+      link.remove();
     }
 
     function renderAll() {
