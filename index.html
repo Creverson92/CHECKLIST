@@ -632,6 +632,23 @@
       margin: 0;
     }
 
+    .storage-warning {
+      border: 1px solid rgba(214, 0, 0, .35);
+      background: #fff4f4;
+      color: #9b0000;
+      padding: 12px 14px;
+      margin: 14px 0 18px;
+      font-weight: 750;
+      line-height: 1.35;
+    }
+
+    .storage-warning small {
+      display: block;
+      margin-top: 4px;
+      color: #6d1d1d;
+      font-weight: 600;
+    }
+
     .history-title-block {
       display: grid;
       gap: 6px;
@@ -2031,6 +2048,8 @@
             <button class="btn primary">Exportar planilha</button>
           </div>
 
+          <div class="storage-warning" id="storageWarning" hidden></div>
+
           <div class="branch-summary" id="branchSummary"></div>
 
           <div class="history-toolbar">
@@ -2488,6 +2507,7 @@
         locations: result.locations || [],
         routes: result.routes || [],
         reports: result.reports || [],
+        storage: result.storage || null,
         users: result.users || []
       });
       if (nextKey === lastSyncKey) return;
@@ -2495,6 +2515,7 @@
 
       if (Array.isArray(result.locations)) locations = result.locations;
       if (Array.isArray(result.routes)) savedRoutes = result.routes;
+      if (result.storage) storageStatus = result.storage;
       if (Array.isArray(result.reports)) {
         const localReports = await readReportBackupsFromDevice();
         publishedChecklists = mergeReports(result.reports, localReports, publishedChecklists);
@@ -2673,6 +2694,7 @@
     let pendingPhotoReview = null;
     let publishedChecklists = [];
     let selectedHistoryBranch = "";
+    let storageStatus = null;
     let savedRoutes = [];
     let systemUsers = [];
     let editingRouteId = null;
@@ -3373,6 +3395,7 @@
       const summary = byId("branchSummary");
       const rows = byId("historyRows");
       if (!summary || !rows) return;
+      renderStorageWarning();
 
       const query = (byId("historySearch")?.value || "").trim().toLowerCase();
       const allHistory = [...publishedChecklists];
@@ -3446,6 +3469,21 @@
       rows.querySelectorAll("[data-delete-report]").forEach(button => {
         button.addEventListener("click", () => deleteReport(button.dataset.deleteReport));
       });
+    }
+
+    function renderStorageWarning() {
+      const warning = byId("storageWarning");
+      if (!warning) return;
+      const showWarning = storageStatus && storageStatus.reportsRequireDatabase && !storageStatus.reportsPermanent;
+      warning.hidden = !showWarning;
+      if (!showWarning) {
+        warning.innerHTML = "";
+        return;
+      }
+      warning.innerHTML = `
+        Historico permanente desconectado.
+        <small>Cloudinary salva fotos e assinaturas, mas os registros do checklist precisam do DATABASE_URL no Render.</small>
+      `;
     }
 
     function renderRouteSummary() {

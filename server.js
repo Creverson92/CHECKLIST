@@ -19,7 +19,8 @@ const publicFiles = {
 const logoPath = path.join(__dirname, "logo-normal.webp");
 const sessions = new Map();
 const databaseUrl = process.env.DATABASE_URL || "";
-const requireDatabaseForReports = process.env.REQUIRE_DATABASE_FOR_REPORTS === "true";
+const runningOnRender = process.env.RENDER === "true";
+const requireDatabaseForReports = process.env.REQUIRE_DATABASE_FOR_REPORTS === "true" || runningOnRender;
 const cloudinaryConfig = {
   cloudName: process.env.CLOUDINARY_CLOUD_NAME || "",
   apiKey: process.env.CLOUDINARY_API_KEY || "",
@@ -33,6 +34,19 @@ let sharpImage = null;
 
 function reportDatabaseRequired() {
   return requireDatabaseForReports;
+}
+
+function storageStatus() {
+  return {
+    cloudinaryConfigured: cloudinaryReady(),
+    databaseConfigured: Boolean(databaseUrl),
+    runningOnRender,
+    reportsRequireDatabase: reportDatabaseRequired(),
+    reportsPermanent: Boolean(databaseUrl),
+    message: databaseUrl
+      ? "Historico permanente conectado."
+      : "Historico permanente desconectado. Configure DATABASE_URL no Render; Cloudinary salva apenas fotos e assinaturas."
+  };
 }
 
 function getPdfDocument() {
@@ -1274,6 +1288,7 @@ const server = http.createServer(async (request, response) => {
       locations: readLocations(),
       routes: readRoutes(),
       reports: reportsForSession(session, reports),
+      storage: storageStatus(),
       users: isAdminSession(session) ? allUsers().map(publicUser) : []
     };
     return sendJson(response, 200, body);
