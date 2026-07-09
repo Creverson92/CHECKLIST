@@ -750,6 +750,19 @@
       outline: none;
     }
 
+    .form-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-top: 16px;
+    }
+
+    .lead.compact {
+      margin-top: 8px;
+      font-size: .92rem;
+    }
+
     textarea {
       min-height: 84px;
       resize: vertical;
@@ -823,6 +836,13 @@
       padding: 12px;
       background: var(--soft);
       border: 1px solid var(--line);
+    }
+
+    .location-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
     }
 
     .tag {
@@ -2059,7 +2079,7 @@
             </div>
             <div class="history-tools">
               <button class="btn small" id="clearBranchFilter" type="button" hidden>Mostrar todas</button>
-              <input class="history-search" id="historySearch" placeholder="Pesquisar por checklist, filial, roteiro ou executor">
+              <input class="history-search" id="historySearch" placeholder="Pesquisar por checklist, identificacao, filial, roteiro ou executor">
             </div>
           </div>
 
@@ -2071,7 +2091,7 @@
                   <th>Divisao</th>
                   <th>Filial</th>
                   <th>Roteiro</th>
-                  <th>Objeto</th>
+                  <th>Identificacao</th>
                   <th>Criado em</th>
                   <th>Finalizado em</th>
                   <th>Executor</th>
@@ -2094,7 +2114,7 @@
 
           <div class="grid two">
             <section class="panel">
-              <div class="panel-header"><h2>Cadastrar localidade</h2></div>
+              <div class="panel-header"><h2 id="locationFormTitle">Cadastrar localidade</h2></div>
               <div class="panel-body">
                 <div class="form-row">
                   <div class="field">
@@ -2115,7 +2135,10 @@
                   <label for="locationAddress">Endereco</label>
                   <input id="locationAddress" placeholder="Cidade, UF ou endereco completo">
                 </div>
-                <button class="btn primary" id="addLocation">Adicionar localidade</button>
+                <div class="form-actions">
+                  <button class="btn primary" id="addLocation">Salvar localidade</button>
+                  <button class="btn" id="cancelLocationEdit" type="button" hidden>Cancelar edicao</button>
+                </div>
               </div>
             </section>
 
@@ -2201,6 +2224,20 @@
             <div class="panel-header"><h2>Escolher local</h2></div>
             <div class="panel-body">
               <div class="route-picker-grid" id="locationPickerGrid"></div>
+            </div>
+          </section>
+          <section class="panel route-picker" id="checklistIdentityPicker" hidden>
+            <div class="panel-header"><h2>Identificacao do Checklist</h2></div>
+            <div class="panel-body">
+              <div class="field">
+                <label for="checklistIdentification">Nome ou referencia</label>
+                <input id="checklistIdentification" placeholder="Ex.: NF 12345, placa ABC1D23 ou cliente">
+              </div>
+              <p class="lead compact" id="checklistIdentityContext"></p>
+              <div class="form-actions">
+                <button class="btn primary" id="startIdentifiedChecklist" type="button">Iniciar checklist</button>
+                <button class="btn" id="changeChecklistRoute" type="button">Trocar roteiro</button>
+              </div>
             </div>
           </section>
           <div class="mobile-preview" id="mobilePreview" hidden>
@@ -2687,6 +2724,8 @@
     let routeSummaryOpen = false;
     let selectedRouteId = null;
     let selectedLocationId = null;
+    let checklistIdentification = "";
+    let checklistIdentificationDraft = "";
     let mobileStepIndex = 0;
     let mobileAnswers = {};
     let pendingPublishes = [];
@@ -2699,6 +2738,7 @@
     let systemUsers = [];
     let editingRouteId = null;
     let editingRouteLocationIds = null;
+    let editingLocationId = null;
     let syncTimer = null;
     let pendingSyncTimer = null;
     let draftSaveTimer = null;
@@ -2908,6 +2948,8 @@
         owner: currentUserKey(),
         selectedRouteId,
         selectedLocationId,
+        checklistIdentification,
+        checklistIdentificationDraft,
         mobileStepIndex,
         mobileAnswers,
         pendingPhotoReview,
@@ -2967,6 +3009,8 @@
       selectedLocationId = locationIds.includes(Number(draft.selectedLocationId))
         ? Number(draft.selectedLocationId)
         : ((route.locations || []).length === 1 ? route.locations[0].id : null);
+      checklistIdentification = String(draft.checklistIdentification || draft.identification || "").trim();
+      checklistIdentificationDraft = String(draft.checklistIdentificationDraft || checklistIdentification || "").trim();
       mobileStepIndex = Number(draft.mobileStepIndex || 0);
       mobileAnswers = draft.mobileAnswers || {};
       pendingPhotoReview = draft.pendingPhotoReview || null;
@@ -3191,6 +3235,8 @@
       if (options.clearDraft) clearMobileDraft();
       if (options.clearRoute) selectedRouteId = null;
       selectedLocationId = null;
+      checklistIdentification = "";
+      checklistIdentificationDraft = "";
       mobileStepIndex = 0;
       mobileAnswers = {};
       pendingPhotoReview = null;
@@ -3359,16 +3405,26 @@
         const row = document.createElement("div");
         row.className = "location-item";
         row.innerHTML = `<div><strong>${location.name}</strong><span class="tag">${location.type}</span><br><small>${location.address || "Endereco nao informado"}</small></div>`;
+        const actions = document.createElement("div");
+        actions.className = "location-actions";
+        const edit = document.createElement("button");
+        edit.className = "btn small";
+        edit.textContent = "Editar";
+        edit.addEventListener("click", () => editLocation(location.id));
         const remove = document.createElement("button");
         remove.className = "btn small danger";
         remove.textContent = "Excluir";
         remove.addEventListener("click", async () => {
+          const confirmed = window.confirm(`Excluir a localidade "${location.name}"?`);
+          if (!confirmed) return;
           const removed = await deleteLocationFromServer(location.id);
           if (!removed) return;
+          if (Number(editingLocationId) === Number(location.id)) resetLocationForm();
           await loadSharedStateFromServer();
           renderAll();
         });
-        row.append(remove);
+        actions.append(edit, remove);
+        row.append(actions);
         list.append(row);
       });
 
@@ -3391,6 +3447,29 @@
       });
     }
 
+    function editLocation(id) {
+      const location = locations.find(item => Number(item.id) === Number(id));
+      if (!location) return;
+      editingLocationId = location.id;
+      byId("locationFormTitle").textContent = "Editar localidade";
+      byId("locationName").value = location.name || "";
+      byId("locationType").value = location.type || "Filial";
+      byId("locationAddress").value = location.address || "";
+      byId("addLocation").textContent = "Salvar alteracoes";
+      byId("cancelLocationEdit").hidden = false;
+      byId("locationName").focus();
+    }
+
+    function resetLocationForm() {
+      editingLocationId = null;
+      byId("locationFormTitle").textContent = "Cadastrar localidade";
+      byId("locationName").value = "";
+      byId("locationType").value = "Matriz";
+      byId("locationAddress").value = "";
+      byId("addLocation").textContent = "Salvar localidade";
+      byId("cancelLocationEdit").hidden = true;
+    }
+
     function renderDashboard() {
       const summary = byId("branchSummary");
       const rows = byId("historyRows");
@@ -3403,7 +3482,8 @@
       const filtered = allHistory.filter(item => {
         const branch = item.branch || "Sem filial";
         const executor = item.executor || item.executorName || item.executorUsername || "Nao informado";
-        const text = `${item.id} ${item.division} ${branch} ${item.route} ${item.object} ${executor} ${item.executorUsername || ""}`.toLowerCase();
+        const identification = item.identification || item.object || "";
+        const text = `${item.id} ${item.division} ${branch} ${item.route} ${identification} ${executor} ${item.executorUsername || ""}`.toLowerCase();
         return (!branchFilter || branch === branchFilter) && text.includes(query);
       });
       const branches = [...new Set(allHistory.map(item => item.branch || "Sem filial"))];
@@ -3440,13 +3520,14 @@
       filtered.forEach(item => {
         const branch = item.branch || "Sem filial";
         const executor = item.executor || item.executorName || item.executorUsername || "Nao informado";
+        const identification = item.identification || item.object || "Nao informado";
         const row = document.createElement("tr");
         row.innerHTML = `
           <td>${escapeHtml(item.id)}</td>
           <td>${escapeHtml(item.division || "Nao informado")}</td>
           <td>${escapeHtml(branch)}</td>
           <td>${escapeHtml(item.route || "Nao informado")}</td>
-          <td>${escapeHtml(item.object || "Nao informado")}</td>
+          <td>${escapeHtml(identification)}</td>
           <td>${escapeHtml(item.created || "Nao informado")}</td>
           <td>${escapeHtml(item.finished || "Nao informado")}</td>
           <td>${escapeHtml(executor)}</td>
@@ -3499,13 +3580,17 @@
       const picker = byId("routePicker");
       const preview = byId("mobilePreview");
       const locationPicker = byId("locationPicker");
-      if (!grid || !picker || !preview || !locationPicker) return;
+      const identityPicker = byId("checklistIdentityPicker");
+      if (!grid || !picker || !preview || !locationPicker || !identityPicker) return;
 
       const routes = routeOptions();
       const selected = routes.find(route => route.id === selectedRouteId);
+      const needsLocation = selected && !selectedLocationId && (selected.locations || []).length > 1;
+      const needsIdentification = selected && selectedLocationId && !checklistIdentification.trim();
       picker.hidden = !!selected;
-      locationPicker.hidden = !selected || !!selectedLocationId || (selected.locations || []).length <= 1;
-      preview.hidden = !selected || (!selectedLocationId && (selected.locations || []).length > 1);
+      locationPicker.hidden = !needsLocation;
+      identityPicker.hidden = !needsIdentification;
+      preview.hidden = !selected || needsLocation || needsIdentification;
       grid.innerHTML = "";
 
       if (!routes.length) {
@@ -3524,6 +3609,8 @@
         button.addEventListener("click", () => {
           selectedRouteId = route.id;
           selectedLocationId = route.locations.length === 1 ? route.locations[0].id : null;
+          checklistIdentification = "";
+          checklistIdentificationDraft = "";
           mobileStepIndex = 0;
           mobileAnswers = {};
           pendingPhotoReview = null;
@@ -3539,7 +3626,7 @@
       if (selected) {
         const activeLocation = selected.locations.find(location => location.id === selectedLocationId) || selected.locations[0];
         byId("mobileRouteTitle").textContent = selected.title;
-        byId("mobileRouteSubtitle").textContent = `${activeLocation.name} - checklist em andamento`;
+        byId("mobileRouteSubtitle").textContent = `${activeLocation.name} - ${checklistIdentification || "checklist em andamento"}`;
       }
     }
 
@@ -3566,6 +3653,8 @@
         `;
         button.addEventListener("click", () => {
           selectedLocationId = location.id;
+          checklistIdentification = "";
+          checklistIdentificationDraft = "";
           mobileStepIndex = 0;
           mobileAnswers = {};
           pendingPhotoReview = null;
@@ -3577,6 +3666,43 @@
         });
         grid.append(button);
       });
+    }
+
+    function renderChecklistIdentityPicker() {
+      const picker = byId("checklistIdentityPicker");
+      const input = byId("checklistIdentification");
+      const context = byId("checklistIdentityContext");
+      const route = routeOptions().find(option => option.id === selectedRouteId);
+      const activeLocation = route?.locations?.find(location => location.id === selectedLocationId) || route?.locations?.[0];
+      if (!picker || !input || !context) return;
+
+      const shouldShow = !!route && !!selectedLocationId && !checklistIdentification.trim();
+      picker.hidden = !shouldShow;
+      if (!shouldShow) return;
+
+      input.value = checklistIdentificationDraft;
+      context.textContent = `${route.title} - ${activeLocation?.name || "Local nao informado"}`;
+    }
+
+    function confirmChecklistIdentification() {
+      const input = byId("checklistIdentification");
+      const value = String(input?.value || checklistIdentificationDraft || "").trim();
+      if (!value) {
+        window.alert("Informe a identificacao do checklist antes de iniciar.");
+        input?.focus();
+        return;
+      }
+      checklistIdentification = value;
+      checklistIdentificationDraft = value;
+      mobileStepIndex = 0;
+      mobileAnswers = {};
+      pendingPhotoReview = null;
+      autoOpenPhotoRequest = null;
+      scheduleMobileDraftSave();
+      renderRoutePicker();
+      renderLocationPicker();
+      renderChecklistIdentityPicker();
+      renderMobileItems();
     }
 
     function renderTypeGrid() {
@@ -4011,12 +4137,17 @@
       const target = byId("mobileItems");
       renderRoutePicker();
       renderLocationPicker();
+      renderChecklistIdentityPicker();
       if (!selectedRouteId) {
         target.innerHTML = "";
         return;
       }
       const selectedRoute = routeOptions().find(option => option.id === selectedRouteId);
       if (selectedRoute && selectedRoute.locations.length > 1 && !selectedLocationId) {
+        target.innerHTML = "";
+        return;
+      }
+      if (selectedRoute && selectedLocationId && !checklistIdentification.trim()) {
         target.innerHTML = "";
         return;
       }
@@ -4709,6 +4840,13 @@
         window.alert("Selecione um roteiro salvo antes de publicar o checklist.");
         return;
       }
+      if (!checklistIdentification.trim()) {
+        confirmButton.disabled = false;
+        confirmButton.textContent = "Sim, publicar checklist";
+        byId("publishModal").classList.remove("open");
+        window.alert("Informe a identificacao do checklist antes de publicar.");
+        return;
+      }
       const routeItems = selectedRouteItems();
       const activeLocation = route.locations.find(location => location.id === selectedLocationId) || route.locations[0];
       const now = new Date();
@@ -4718,7 +4856,8 @@
         division: "Sul de Minas",
         branch: activeLocation.name.replace("Unico Logistica - ", ""),
         route: route.title,
-        object: "Checklist publicado",
+        object: checklistIdentification.trim(),
+        identification: checklistIdentification.trim(),
         createdAt: now.toISOString(),
         finishedAt: now.toISOString(),
         created: now.toLocaleDateString("pt-BR") + " - " + now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
@@ -4832,7 +4971,7 @@
             <div class="report-meta-item"><div class="report-icon">03</div><div><strong>Data/hora finalizacao</strong><span>${escapeHtml(report.finished || "Nao informado")}</span></div></div>
             <div class="report-meta-item"><div class="report-icon">04</div><div><strong>Localidade</strong><span>${escapeHtml(report.branch || "Nao informado")}</span></div></div>
             <div class="report-meta-item"><div class="report-icon">05</div><div><strong>Executor</strong><span>${escapeHtml(report.executor || "Nao informado")}</span></div></div>
-            <div class="report-meta-item"><div class="report-icon">06</div><div><strong>Objeto</strong><span>${escapeHtml(report.object || "Nao informado")}</span></div></div>
+            <div class="report-meta-item"><div class="report-icon">06</div><div><strong>Identificacao</strong><span>${escapeHtml(report.identification || report.object || "Nao informado")}</span></div></div>
           </section>
 
           <section class="report-items">
@@ -4942,10 +5081,26 @@
       selectedHistoryBranch = "";
       renderDashboard();
     });
+    byId("checklistIdentification").addEventListener("input", event => {
+      checklistIdentificationDraft = event.target.value;
+      scheduleMobileDraftSave();
+    });
+    byId("checklistIdentification").addEventListener("keydown", event => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        confirmChecklistIdentification();
+      }
+    });
+    byId("startIdentifiedChecklist").addEventListener("click", confirmChecklistIdentification);
+    byId("changeChecklistRoute").addEventListener("click", () => {
+      resetMobileChecklistState({ clearRoute: true, clearDraft: true });
+      renderAll();
+    });
     byId("routeTitle").addEventListener("input", () => {
       renderRouteSummary();
       renderRoutePicker();
       renderLocationPicker();
+      renderChecklistIdentityPicker();
     });
     byId("routeSummaryHeader").addEventListener("click", () => {
       routeSummaryOpen = !routeSummaryOpen;
@@ -4956,12 +5111,13 @@
       routeSummaryOpen = !routeSummaryOpen;
       renderRouteSummary();
     });
+    byId("cancelLocationEdit").addEventListener("click", resetLocationForm);
 
     byId("addLocation").addEventListener("click", async () => {
       const name = byId("locationName").value.trim();
       if (!name) return;
       const location = {
-        id: Date.now(),
+        id: editingLocationId || Date.now(),
         name,
         type: byId("locationType").value,
         address: byId("locationAddress").value.trim()
@@ -4969,8 +5125,7 @@
       const serverLocation = await saveLocationToServer(location);
       if (!serverLocation) return;
       await loadSharedStateFromServer();
-      byId("locationName").value = "";
-      byId("locationAddress").value = "";
+      resetLocationForm();
       renderAll();
     });
 

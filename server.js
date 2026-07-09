@@ -29,6 +29,7 @@ const cloudinaryConfig = {
 };
 let pgPool = null;
 let reportTableReady = null;
+let appStateTableReady = null;
 let PDFDocument = null;
 let sharpImage = null;
 
@@ -110,6 +111,22 @@ async function ensureReportTable() {
     `);
   }
   await reportTableReady;
+  return true;
+}
+
+async function ensureAppStateTable() {
+  const pool = getPgPool();
+  if (!pool) return false;
+  if (!appStateTableReady) {
+    appStateTableReady = pool.query(`
+      CREATE TABLE IF NOT EXISTS checklist_app_state (
+        key TEXT PRIMARY KEY,
+        value JSONB NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+  }
+  await appStateTableReady;
   return true;
 }
 
@@ -870,7 +887,7 @@ function drawReportMetaGrid(doc, report) {
     ["Unidade", "UNICO Logistica LTDA"],
     ["Roteiro", report.route],
     ["Filial", report.branch],
-    ["Objeto", report.object],
+    ["Identificacao", report.identification || report.object],
     ["Criado em", report.created],
     ["Finalizado em", report.finished],
     ["Executor", report.executor || report.executorName || report.executorUsername],
@@ -1292,18 +1309,61 @@ function writeRoutes(routes) {
   fs.writeFileSync(routesPath, JSON.stringify(routes, null, 2));
 }
 
-function readLocations() {
+async function readStateFromDatabase(key) {
   try {
-    const locations = JSON.parse(fs.readFileSync(locationsPath, "utf8"));
-    return Array.isArray(locations) ? locations : seedLocations;
+    if (!await ensureAppStateTable()) return null;
+    const result = await pgPool.query("SELECT value FROM checklist_app_state WHERE key = $1", [key]);
+    return result.rows[0]?.value ?? null;
   } catch (error) {
-    return seedLocations;
+    console.error(`Nao foi possivel ler ${key} no banco:`, error.message);
+    return null;
   }
 }
 
-function writeLocations(locations) {
+async function writeStateToDatabase(key, value) {
+  try {
+    if (!await ensureAppStateTable()) return false;
+    await pgPool.query(
+      `INSERT INTO checklist_app_state (key, value, updated_at)
+       VALUES ($1, $2::jsonb, NOW())
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+      [key, JSON.stringify(value)]
+    );
+    return true;
+  } catch (error) {
+    console.error(`Nao foi possivel gravar ${key} no banco:`, error.message);
+    return false;
+  }
+}
+
+function readLocationsFromFile() {
+  try {
+    const locations = JSON.parse(fs.readFileSync(locationsPath, "utf8"));
+    return Array.isArray(locations) ? locations : cloneData(seedLocations);
+  } catch (error) {
+    return cloneData(seedLocations);
+  }
+}
+
+function writeLocationsToFile(locations) {
   fs.mkdirSync(dataDir, { recursive: true });
   fs.writeFileSync(locationsPath, JSON.stringify(locations, null, 2));
+}
+
+async function readLocations() {
+  const databaseLocations = await readStateFromDatabase("locations");
+  if (Array.isArray(databaseLocations)) return databaseLocations;
+
+  const locations = readLocationsFromFile();
+  if (databaseUrl) await writeStateToDatabase("locations", locations);
+  return locations;
+}
+
+async function writeLocations(locations) {
+  const savedInDatabase = await writeStateToDatabase("locations", locations);
+  if (databaseUrl && !savedInDatabase) return false;
+  writeLocationsToFile(locations);
+  return true;
 }
 
 const server = http.createServer(async (request, response) => {
@@ -1349,7 +1409,7 @@ const server = http.createServer(async (request, response) => {
     const reports = await readReports();
 
     const body = {
-      locations: readLocations(),
+      locations: await readLocations(),
       routes: readRoutes(),
       reports: reportsForSession(session, reports),
       storage: storageStatus(),
@@ -1363,7 +1423,7 @@ const server = http.createServer(async (request, response) => {
     if (!session) return sendJson(response, 401, { error: "Sessao expirada." });
 
     if (request.method === "GET") {
-      return sendJson(response, 200, { locations: readLocations() });
+      return sendJson(response, 200, { locations: await readLocations() });
     }
 
     if (request.method === "POST") {
@@ -1377,9 +1437,10 @@ const server = http.createServer(async (request, response) => {
       };
       if (!location.name) return sendJson(response, 400, { error: "Informe o nome da localidade." });
 
-      const locations = readLocations().filter(item => Number(item.id) !== Number(location.id));
+      const locations = (await readLocations()).filter(item => Number(item.id) !== Number(location.id));
       locations.push(location);
-      writeLocations(locations);
+      const saved = await writeLocations(locations);
+      if (!saved) return sendJson(response, 503, { error: "Nao foi possivel salvar a localidade no banco permanente." });
       return sendJson(response, 200, { location });
     }
   }
@@ -1389,7 +1450,8 @@ const server = http.createServer(async (request, response) => {
     if (!isAdminSession(session)) return sendJson(response, 403, { error: "Acesso negado." });
 
     const id = Number(decodeURIComponent(pathname.replace("/api/locations/", "")));
-    writeLocations(readLocations().filter(location => Number(location.id) !== id));
+    const saved = await writeLocations((await readLocations()).filter(location => Number(location.id) !== id));
+    if (!saved) return sendJson(response, 503, { error: "Nao foi possivel excluir a localidade no banco permanente." });
     return sendJson(response, 200, { ok: true });
   }
 
